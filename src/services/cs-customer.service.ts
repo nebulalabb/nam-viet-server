@@ -99,10 +99,9 @@ class CustomerService {
     }
 
     // ========================================================
-    // 2. UPDATE PROFILE (Phiên bản giới hạn quyền cập nhật)
-    // Khách hàng chỉ được cập nhật các trường an toàn
+    // 2. UPDATE PROFILE (Đã cập nhật logic CCCD + Phone)
     // ========================================================
-    async updateProfile(id: number, data: UpdateCustomerInput) {
+    async updateProfile(id: number, data: UpdateCustomerInput & { cccd?: string }) { 
         const customer = await prisma.customer.findUnique({
             where: { id },
         });
@@ -111,20 +110,27 @@ class CustomerService {
             throw new NotFoundError('Customer not found');
         }
 
-        // CHẶN: Không cho phép update Email dưới mọi hình thức
-        // CHỈ: Xử lý Phone
+        // 1. CHECK TRÙNG SĐT
         if (data.phone && data.phone !== customer.phone) {
-             const exist = await prisma.customer.findFirst({ 
+             const existPhone = await prisma.customer.findFirst({ 
                 where: { phone: data.phone, id: { not: id } } 
              });
-             
-             if (exist) {
+             if (existPhone) {
                  throw new ConflictError('Số điện thoại này đã được sử dụng bởi tài khoản khác');
              }
-             // Nếu không trùng -> Cho phép code chạy tiếp xuống dưới để update
         }
 
-        // Chỉ cho phép cập nhật các trường Khách hàng được phép tự quản lý
+        // 2. CHECK TRÙNG CCCD (Mới thêm)
+        if (data.cccd && data.cccd !== customer.cccd) {
+             const existCCCD = await prisma.customer.findUnique({ 
+                where: { cccd: data.cccd } // Schema có @unique nên findUnique được
+             });
+             // Nếu tìm thấy người khác có CCCD này (và không phải chính mình - đk thừa nhưng an toàn)
+             if (existCCCD && existCCCD.id !== id) {
+                 throw new ConflictError('Số Căn cước công dân này đã được sử dụng');
+             }
+        }
+
         const safeData: Prisma.CustomerUpdateInput = {
             ...(data.customerName && { customerName: data.customerName }),
             ...(data.gender !== undefined && { gender: data.gender }),
@@ -133,28 +139,29 @@ class CustomerService {
             ...(data.province !== undefined && { province: data.province }),
             ...(data.district !== undefined && { district: data.district }),
 
-            //cập nhật được số điện thoại nếu hợp lệ và không trùng
-           ...(data.phone && { 
+            // Cập nhật CCCD
+            ...(data.cccd && { cccd: data.cccd }),
+
+            // Cập nhật Phone
+            ...(data.phone && { 
                 phone: data.phone,
-                // ✅ TỰ ĐỘNG CẬP NHẬT THỜI GIAN KHI ĐỔI SỐ
                 phoneVerifiedAt: new Date() 
             }),
         };
 
         if (Object.keys(safeData).length === 0) {
-            throw new ValidationError('No valid fields provided for update');
+            throw new ValidationError('Không có dữ liệu hợp lệ để cập nhật');
         }
 
         const updatedCustomer = await prisma.customer.update({
             where: { id },
             data: {
                 ...safeData,
-                updatedAt: new Date(), // Cập nhật thời gian
-                // Bỏ updatedBy vì Khách hàng không phải là User hệ thống
+                updatedAt: new Date(),
             },
-            // Bỏ includes không cần thiết
         });
 
+        // Xóa cache để lần sau lấy lại thông tin mới
         await redis.del(`${CachePrefix.USER}customer:${id}`);
 
         return updatedCustomer;

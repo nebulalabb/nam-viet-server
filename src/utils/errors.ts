@@ -63,3 +63,10 @@ export class DatabaseError extends AppError {
     super(message, 500, ErrorCode.DATABASE_ERROR, details);
   }
 }
+
+export class BadRequestError extends AppError {
+  constructor(message: string = 'Bad request', details?: any) {
+    // Sử dụng ErrorCode.BAD_REQUEST vừa thêm
+    super(message, 400, ErrorCode.BAD_REQUEST, details);
+  }
+}

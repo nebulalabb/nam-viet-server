@@ -15,7 +15,7 @@ router.get(
 );
 
 router.get(
-  '/:id',
+  '/:slug',
   optionalCustomerAuthentication,
   asyncHandler(publicProductController.getById.bind(publicProductController))
 );

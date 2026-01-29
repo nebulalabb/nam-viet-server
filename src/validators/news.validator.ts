@@ -15,23 +15,10 @@ export const createNewsSchema = z.object({
     status: z.enum(['draft', 'published', 'archived']).optional(),
     publishedAt: z.string().datetime().optional(),
     isFeatured: z.boolean().optional(),
-    tagIds: z.array(z.number().int()).optional(),
     metaTitle: z.string().max(255).optional(),
     metaDescription: z.string().optional(),
     metaKeywords: z.string().max(255).optional(),
-}).refine(
-    (data) => {
-        // If contentType is video, videoFile is required
-        if (data.contentType === 'video') {
-            return !!data.videoFile;
-        }
-        return true;
-    },
-    {
-        message: "Video file is required when content type is video",
-        path: ["videoFile"],
-    }
-);
+});
 
 // Update News Schema
 export const updateNewsSchema = createNewsSchema.partial();
@@ -41,7 +28,6 @@ export const newsQuerySchema = z.object({
     page: z.string().optional(),
     limit: z.string().optional(),
     categoryId: z.string().optional(),
-    contentType: z.enum(['article', 'video']).optional(),
     status: z.enum(['draft', 'published', 'archived']).optional(),
     isFeatured: z.string().optional(),
     search: z.string().optional(),

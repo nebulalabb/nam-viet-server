@@ -696,7 +696,7 @@ model Customer {
   classification  CustomerClassification @default(retail)
   gender          Gender?
   contactPerson   String?                @map("contact_person") @db.VarChar(100)
-  phone           String                 @db.VarChar(20)
+  phone           String?                @unique @db.VarChar(20)
   email           String?                @db.VarChar(100)
   avatarUrl       String?                @map("avatar_url") @db.VarChar(255)
   address         String?                @db.VarChar(255)
@@ -706,7 +706,7 @@ model Customer {
   creditLimit     Decimal                @default(0) @map("credit_limit") @db.Decimal(15, 2)
   currentDebt     Decimal                @default(0) @map("current_debt") @db.Decimal(15, 2)
   debtUpdatedAt   DateTime?              @map("debt_updated_at")
-  cccd            String?                @db.VarChar(20)
+  cccd            String?                @unique @db.VarChar(20)
   issuedAt        DateTime?              @map("issued_at") @db.Date
   issuedBy        String?                @map("issued_by") @db.VarChar(100)
   status          CustomerStatus         @default(active)
@@ -1423,6 +1423,7 @@ enum AuthProvider {
   PHONE
   GOOGLE
   FACEBOOK
+  ZALO
 }
 
 enum PaymentMethod {

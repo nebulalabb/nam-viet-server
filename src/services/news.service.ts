@@ -29,10 +29,6 @@ export class NewsService {
             where.categoryId = parseInt(query.categoryId);
         }
 
-        if (query.contentType) {
-            where.contentType = query.contentType;
-        }
-
         if (query.isFeatured) {
             where.isFeatured = query.isFeatured === 'true';
         }
@@ -67,11 +63,6 @@ export class NewsService {
                             avatarUrl: true,
                         },
                     },
-                    newsTagRelations: {
-                        include: {
-                            tag: true,
-                        },
-                    },
                 },
             }),
             prisma.news.count({ where }),
@@ -103,11 +94,6 @@ export class NewsService {
                         avatarUrl: true,
                     },
                 },
-                newsTagRelations: {
-                    include: {
-                        tag: true,
-                    },
-                },
             },
         });
     }
@@ -131,11 +117,6 @@ export class NewsService {
                         avatarUrl: true,
                     },
                 },
-                newsTagRelations: {
-                    include: {
-                        tag: true,
-                    },
-                },
             },
         });
     }
@@ -144,24 +125,14 @@ export class NewsService {
      * Create news
      */
     static async createNews(data: CreateNewsInput, userId: number) {
-        const { tagIds, ...newsData } = data;
-
         const news = await prisma.news.create({
             data: {
-                ...newsData,
+                ...data,
                 authorId: userId,
                 createdBy: userId,
-                newsTagRelations: tagIds ? {
-                    create: tagIds.map(tagId => ({ tagId })),
-                } : undefined,
             },
             include: {
                 category: true,
-                newsTagRelations: {
-                    include: {
-                        tag: true,
-                    },
-                },
             },
         });
 
@@ -172,32 +143,14 @@ export class NewsService {
      * Update news
      */
     static async updateNews(id: number, data: UpdateNewsInput, userId: number) {
-        const { tagIds, ...newsData } = data;
-
-        // If tagIds provided, update tags
-        if (tagIds !== undefined) {
-            // Delete existing tags
-            await prisma.newsTagRelation.deleteMany({
-                where: { newsId: id },
-            });
-        }
-
         const news = await prisma.news.update({
             where: { id },
             data: {
-                ...newsData,
+                ...data,
                 updatedBy: userId,
-                newsTagRelations: tagIds ? {
-                    create: tagIds.map(tagId => ({ tagId })),
-                } : undefined,
             },
             include: {
                 category: true,
-                newsTagRelations: {
-                    include: {
-                        tag: true,
-                    },
-                },
             },
         });
 
