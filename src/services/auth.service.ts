@@ -308,19 +308,8 @@ class AuthService {
       throw new NotFoundError('Người dùng không tồn tại');
     }
 
-    // Get user permissions
-    const rolePermissions = await prisma.rolePermission.findMany({
-      where: { roleId: user.roleId },
-      include: {
-        permission: {
-          select: {
-            permissionKey: true,
-          },
-        },
-      },
-    });
-
-    const permissions = rolePermissions.map((rp) => rp.permission.permissionKey);
+    // Get user permissions (Role + Direct)
+    const permissions = await this.getUserPermissions(user.id, user.roleId);
 
     const { passwordHash, createdBy, updatedBy, ...userWithoutPassword } = user;
 
@@ -406,6 +395,46 @@ class AuthService {
       code,
       expiresIn: 5 * 60, // 5 minutes in seconds
     };
+  }
+
+  // Helper method to get user permissions (Role + Direct)
+  private async getUserPermissions(userId: number, roleId: number): Promise<string[]> {
+    // 1. Get permissions from Role
+    const rolePermissions = await prisma.rolePermission.findMany({
+      where: { roleId },
+      include: {
+        permission: {
+          select: {
+            permissionKey: true,
+          },
+        },
+      },
+    });
+
+    const permissionsSet = new Set(rolePermissions.map((rp) => rp.permission.permissionKey));
+
+    // 2. Get direct user permissions (Grant/Revoke)
+    const userPermissions = await prisma.userPermission.findMany({
+      where: { userId },
+      include: {
+        permission: {
+          select: {
+            permissionKey: true,
+          },
+        },
+      },
+    });
+
+    // 3. Apply overrides
+    for (const up of userPermissions) {
+      if (up.grantType === 'grant') {
+        permissionsSet.add(up.permission.permissionKey);
+      } else if (up.grantType === 'revoke') {
+        permissionsSet.delete(up.permission.permissionKey);
+      }
+    }
+
+    return Array.from(permissionsSet);
   }
 
   // Verify OTP code and complete login
@@ -496,19 +525,8 @@ class AuthService {
       method: '2FA_OTP',
     });
 
-    // Get user permissions
-    const rolePermissions = await prisma.rolePermission.findMany({
-      where: { roleId: user.roleId },
-      include: {
-        permission: {
-          select: {
-            permissionKey: true,
-          },
-        },
-      },
-    });
-
-    const permissions = rolePermissions.map((rp) => rp.permission.permissionKey);
+    // Get user permissions (Role + Direct)
+    const permissions = await this.getUserPermissions(user.id, user.roleId);
 
     // Prepare response
     const { passwordHash, createdBy, updatedBy, ...userWithoutPassword } = user;

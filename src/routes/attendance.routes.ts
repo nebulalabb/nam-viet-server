@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import attendanceController from '@controllers/attendance.controller';
+import qrCodeController from '@controllers/qr-code.controller';
 import { authentication } from '@middlewares/auth';
 import { authorize } from '@middlewares/authorize';
 import { validate } from '@middlewares/validate';
@@ -14,6 +15,7 @@ import {
   monthlyReportSchema,
   lockMonthSchema,
 } from '@validators/attendance.validator';
+import { generateQRSchema, scanQRSchema } from '@validators/qr-code.validator';
 import { logActivityMiddleware } from '@middlewares/logger';
 import multer from 'multer';
 
@@ -146,6 +148,57 @@ router.delete(
   authorize('delete_attendance'),
   logActivityMiddleware('delete', 'attendance'),
   asyncHandler(attendanceController.delete.bind(attendanceController))
+);
+
+// =====================================================
+// QR CODE ROUTES
+// =====================================================
+
+// POST /api/attendance/qr/generate - Generate QR code for attendance
+router.post(
+  '/qr/generate',
+  authorize('update_attendance'),
+  validate(generateQRSchema),
+  logActivityMiddleware('generate QR', 'attendance'),
+  asyncHandler(qrCodeController.generate.bind(qrCodeController))
+);
+
+// POST /api/attendance/qr/scan - Scan QR code and check-in
+router.post(
+  '/qr/scan',
+  validate(scanQRSchema),
+  logActivityMiddleware('scan QR', 'attendance'),
+  asyncHandler(qrCodeController.scan.bind(qrCodeController))
+);
+
+// GET /api/attendance/qr - Get all QR codes
+router.get(
+  '/qr',
+  authorize('view_attendance'),
+  asyncHandler(qrCodeController.getAll.bind(qrCodeController))
+);
+
+// GET /api/attendance/qr/:id - Get QR code by ID
+router.get(
+  '/qr/:id',
+  authorize('view_attendance'),
+  asyncHandler(qrCodeController.getById.bind(qrCodeController))
+);
+
+// PUT /api/attendance/qr/:id/deactivate - Deactivate QR code
+router.put(
+  '/qr/:id/deactivate',
+  authorize('update_attendance'),
+  logActivityMiddleware('deactivate QR', 'attendance'),
+  asyncHandler(qrCodeController.deactivate.bind(qrCodeController))
+);
+
+// DELETE /api/attendance/qr/:id - Delete QR code
+router.delete(
+  '/qr/:id',
+  authorize('delete_attendance'),
+  logActivityMiddleware('delete QR', 'attendance'),
+  asyncHandler(qrCodeController.delete.bind(qrCodeController))
 );
 
 export default router;

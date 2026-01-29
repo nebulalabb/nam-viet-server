@@ -74,6 +74,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.10",
     "prisma": "^6.18.0",
+    "qrcode": "^1.5.4",
     "redis": "^5.9.0",
     "sharp": "^0.34.4",
     "socket.io": "^4.8.1",
