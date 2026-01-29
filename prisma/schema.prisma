@@ -174,6 +174,8 @@ model User {
   newsUpdated             News[]             @relation("NewsUpdater")
   generalSettingsUpdated  GeneralSetting[]
   loginHistories          LoginHistory[]
+  qrCodesCreated          AttendanceQRCode[] @relation("QRCodeCreator")
+  qrScanLogs              AttendanceQRLog[]
   userPermissions         UserPermission[]   @relation("PermissionAssignedBy")
   userPermissionsAssigned UserPermission[]
 
@@ -1107,8 +1109,9 @@ model Attendance {
   notes            String?          @db.VarChar(255)
   createdAt        DateTime         @default(now()) @map("created_at")
 
-  user     User  @relation(fields: [userId], references: [id])
-  approver User? @relation("AttendanceApprover", fields: [approvedBy], references: [id])
+  user     User              @relation(fields: [userId], references: [id])
+  approver User?             @relation("AttendanceApprover", fields: [approvedBy], references: [id])
+  qrLogs   AttendanceQRLog[]
 
   @@unique([userId, date])
   @@index([date])
@@ -1130,6 +1133,54 @@ model AttendanceMonth {
   @@unique([month])
   @@index([month])
   @@map("attendance_months")
+}
+
+// QR Code for Attendance Check-in
+model AttendanceQRCode {
+  id           Int       @id @default(autoincrement())
+  qrCode       String    @map("qr_code") @db.LongText
+  sessionToken String    @unique @map("session_token") @db.VarChar(500)
+  startDate    DateTime  @map("start_date") @db.Date
+  endDate      DateTime  @map("end_date") @db.Date
+  shift        ShiftType @default(all_day)
+  type         ScanType  @default(check_in)
+  isActive     Boolean   @default(true) @map("is_active")
+  usageCount   Int       @default(0) @map("usage_count")
+  createdBy    Int       @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime  @map("expires_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  creator User              @relation("QRCodeCreator", fields: [createdBy], references: [id])
+  logs    AttendanceQRLog[]
+
+  @@index([sessionToken])
+  @@index([startDate, endDate])
+  @@index([isActive])
+  @@map("attendance_qr_codes")
+}
+
+// QR Scan Log for Audit Trail
+model AttendanceQRLog {
+  id           Int          @id @default(autoincrement())
+  qrCodeId     Int          @map("qr_code_id")
+  userId       Int          @map("user_id")
+  attendanceId Int?         @map("attendance_id")
+  scannedAt    DateTime     @default(now()) @map("scanned_at")
+  ipAddress    String?      @map("ip_address") @db.VarChar(45)
+  userAgent    String?      @map("user_agent") @db.VarChar(255)
+  location     String?      @db.VarChar(255)
+  status       QRScanStatus @default(success)
+  errorMessage String?      @map("error_message") @db.VarChar(500)
+
+  qrCode     AttendanceQRCode @relation(fields: [qrCodeId], references: [id])
+  user       User             @relation(fields: [userId], references: [id])
+  attendance Attendance?      @relation(fields: [attendanceId], references: [id])
+
+  @@index([qrCodeId])
+  @@index([userId])
+  @@index([scannedAt])
+  @@map("attendance_qr_logs")
 }
 
 model Salary {
@@ -1488,6 +1539,26 @@ enum SalaryStatus {
   pending
   approved
   paid
+}
+
+enum QRScanStatus {
+  success
+  expired
+  invalid
+  already_checked_in
+  outside_date_range
+  error
+}
+
+enum ShiftType {
+  morning
+  afternoon
+  all_day
+}
+
+enum ScanType {
+  check_in
+  check_out
 }
 
 enum NotificationType {
