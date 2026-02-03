@@ -19,7 +19,7 @@ class CustomerService {
     async confirmPhoneUsage(id: number) {
         return await prisma.customer.update({
             where: { id },
-            data: { 
+            data: {
                 phoneVerifiedAt: new Date() // Cập nhật thời gian hiện tại
             }
         });
@@ -29,8 +29,8 @@ class CustomerService {
     // Trả về true nếu: Là Acc Social + Có SĐT + (Chưa verify bao giờ HOẶC Đã verify quá 3 tháng)
     checkIfNeedPhoneVerification(customer: any, authProvider: string): boolean {
         // Chỉ áp dụng cho tài khoản Social (GG/FB)
-        if (authProvider === 'PHONE') return false; 
-        
+        if (authProvider === 'PHONE') return false;
+
         // Nếu chưa có SĐT thì không cần check (vì sẽ bị bắt buộc nhập ở Profile rồi)
         if (!customer.phone || customer.phone.length < 8) return false;
 
@@ -83,7 +83,7 @@ class CustomerService {
             throw new NotFoundError('Customer not found');
         }
         // Lấy provider từ account đầu tiên
-        const provider = customer.customerAccount?.[0]?.authProvider || 'PHONE';
+        const provider = customer.customerAccount?.authProvider || 'PHONE';
 
         // --- SỬ DỤNG HÀM TÍNH TOÁN ---
         const debtMetrics = calculateDebtMetrics(customer.currentDebt, customer.creditLimit);
@@ -99,32 +99,60 @@ class CustomerService {
     }
 
     // ========================================================
-    // 2. UPDATE PROFILE (Phiên bản giới hạn quyền cập nhật)
-    // Khách hàng chỉ được cập nhật các trường an toàn
+    // 2. UPDATE PROFILE (Đã bổ sung logic Email)
     // ========================================================
-    async updateProfile(id: number, data: UpdateCustomerInput) {
+    async updateProfile(id: number, data: UpdateCustomerInput & { cccd?: string, email?: string }) {
         const customer = await prisma.customer.findUnique({
             where: { id },
+            include: {
+                customerAccount: {
+                    select: {
+                        authProvider: true
+                    },
+                },
+            },
         });
 
         if (!customer) {
             throw new NotFoundError('Customer not found');
         }
 
-        // CHẶN: Không cho phép update Email dưới mọi hình thức
-        // CHỈ: Xử lý Phone
+        // 1. CHECK TRÙNG SĐT
         if (data.phone && data.phone !== customer.phone) {
-             const exist = await prisma.customer.findFirst({ 
-                where: { phone: data.phone, id: { not: id } } 
-             });
-             
-             if (exist) {
-                 throw new ConflictError('Số điện thoại này đã được sử dụng bởi tài khoản khác');
-             }
-             // Nếu không trùng -> Cho phép code chạy tiếp xuống dưới để update
+            const existPhone = await prisma.customer.findFirst({
+                where: { phone: data.phone, id: { not: id } }
+            });
+            if (existPhone) {
+                throw new ConflictError('Số điện thoại này đã được sử dụng bởi tài khoản khác');
+            }
         }
 
-        // Chỉ cho phép cập nhật các trường Khách hàng được phép tự quản lý
+        // 2. CHECK TRÙNG CCCD
+        if (data.cccd && data.cccd !== customer.cccd) {
+            const existCCCD = await prisma.customer.findUnique({
+                where: { cccd: data.cccd }
+            });
+            if (existCCCD && existCCCD.id !== id) {
+                throw new ConflictError('Số Căn cước công dân này đã được sử dụng');
+            }
+        }
+
+        // 3. CHECK EMAIL (Logic mới thêm) ✅
+        if (data.email && data.email !== customer.email) {
+            // A. Chặn tài khoản Google đổi email
+            if (customer.customerAccount?.authProvider === 'GOOGLE') {
+                throw new ValidationError('Tài khoản đăng nhập bằng Google không thể thay đổi Email');
+            }
+
+            // B. Check trùng Email
+            const existEmail = await prisma.customer.findFirst({
+                where: { email: data.email, id: { not: id } }
+            });
+            if (existEmail) {
+                throw new ConflictError('Địa chỉ Email này đã được sử dụng bởi tài khoản khác');
+            }
+        }
+
         const safeData: Prisma.CustomerUpdateInput = {
             ...(data.customerName && { customerName: data.customerName }),
             ...(data.gender !== undefined && { gender: data.gender }),
@@ -133,28 +161,32 @@ class CustomerService {
             ...(data.province !== undefined && { province: data.province }),
             ...(data.district !== undefined && { district: data.district }),
 
-            //cập nhật được số điện thoại nếu hợp lệ và không trùng
-           ...(data.phone && { 
+            // Cập nhật CCCD
+            ...(data.cccd && { cccd: data.cccd }),
+
+            // Cập nhật Phone
+            ...(data.phone && {
                 phone: data.phone,
-                // ✅ TỰ ĐỘNG CẬP NHẬT THỜI GIAN KHI ĐỔI SỐ
-                phoneVerifiedAt: new Date() 
+                phoneVerifiedAt: new Date()
             }),
+
+            // ✅ QUAN TRỌNG: Bổ sung dòng này để lưu Email vào DB
+            ...(data.email && { email: data.email }),
         };
 
         if (Object.keys(safeData).length === 0) {
-            throw new ValidationError('No valid fields provided for update');
+            throw new ValidationError('Không có dữ liệu hợp lệ để cập nhật');
         }
 
         const updatedCustomer = await prisma.customer.update({
             where: { id },
             data: {
                 ...safeData,
-                updatedAt: new Date(), // Cập nhật thời gian
-                // Bỏ updatedBy vì Khách hàng không phải là User hệ thống
+                updatedAt: new Date(),
             },
-            // Bỏ includes không cần thiết
         });
 
+        // Xóa cache
         await redis.del(`${CachePrefix.USER}customer:${id}`);
 
         return updatedCustomer;

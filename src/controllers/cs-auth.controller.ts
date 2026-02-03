@@ -1,291 +1,171 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '@custom-types/common.type';
-import customerAuthService from '@services/cs-auth.service';
-import { AuthProvider } from '@prisma/client';
-import type {
-    SocialLoginInput,
-    LoginPasswordInput,
-    SetPasswordInput,
-    CheckPhoneInput,
-} from '@validators/customer_account.validator';
+import customerAuthService from '../services/cs-auth.service'; // Import Service đã dọn dẹp
+import { AuthRequest } from '@custom-types/common.type'; // Type mở rộng của Express có req.user
+import { BadRequestError, AuthenticationError } from '@utils/errors'; // File xử lý lỗi của bạn
 
-// -----------------------------------------------------------------------------
-// [DEBUG_CONFIG] Đặt thành false để tắt toàn bộ log debug bên dưới
-const ENABLE_DEBUG_LOG = true; 
-
-const debugLog = (action: string, data: any) => {
-    if (ENABLE_DEBUG_LOG) {
-        console.log(`\n🟡 [DEBUG_AUTH] Action: ${action}`);
-        console.log('📦 Data:', JSON.stringify(data, null, 2));
-        console.log('--------------------------------------------------\n');
-    }
+// Cấu hình Cookie an toàn (HttpOnly)
+const COOKIE_NAME = 'c_refresh_token';
+const COOKIE_OPTIONS = {
+    httpOnly: true, // Client JS không đọc được (Chống XSS)
+    secure: process.env.NODE_ENV === 'production', // Chỉ HTTPS khi deploy
+    sameSite: 'strict' as const, // Chống CSRF
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 ngày
 };
-// -----------------------------------------------------------------------------
 
 class CustomerAuthController {
 
-    // --- HELPER: Set Cookie HttpOnly ---
-    private setRefreshTokenCookie(res: Response, token: string) {
-        const isProduction = process.env.NODE_ENV === 'production';
-        res.cookie('c_refresh_token', token, {
-            httpOnly: true,                 // JS Client không đọc được (Chống XSS)
-            secure: isProduction,           // Chỉ gửi qua HTTPS ở môi trường Prod
-            sameSite: 'strict',             // Chống CSRF
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 ngày (Khớp với TTL Redis)
-            path: '/'
-        });
-    }
-
-    // 1. KIỂM TRA SĐT
-    async checkPhone(req: Request, res: Response, next: NextFunction) {
+    // ============================================================
+    // 1. LOGIN ZALO
+    // ============================================================
+    // POST /api/cs/auth/login-zalo
+    async loginZalo(req: Request, res: Response, next: NextFunction) {
         try {
-            const { phone } = req.body as CheckPhoneInput;
-            
-            // [DEBUG] Log Input
-            debugLog('CHECK_PHONE_INPUT', { phone });
+            const { code } = req.body;
+            if (!code) throw new BadRequestError("Vui lòng cung cấp mã xác thực Zalo (code)");
 
-            const result = await customerAuthService.checkPhoneExistence(phone);
-            
-            // [DEBUG] Log Output
-            debugLog('CHECK_PHONE_OUTPUT', result);
+            // Gọi Service: Hàm này nằm trong Service bạn đã thêm ở bước Zalo
+            const result = await customerAuthService.loginZalo(code);
 
-            return res.status(200).json({ success: true, data: result });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
-        }
-    }
+            // 1. Lưu Refresh Token vào Cookie
+            res.cookie(COOKIE_NAME, result.tokens.refreshToken, COOKIE_OPTIONS);
 
-    // 2. ĐỒNG BỘ TÀI KHOẢN (Phone/OTP Login & Register)
-    async syncPhoneAccount(req: Request, res: Response, next: NextFunction) {
-        try {
-            const { uid, phone, password } = req.body; 
-            
-            // [DEBUG] Log Input
-            debugLog('SYNC_PHONE_INPUT', { uid, phone, hasPassword: !!password });
-
-            const result = await customerAuthService.syncPhoneAccount({ uid, phone, password });
-
-            // ✅ Set Cookie Refresh Token
-            this.setRefreshTokenCookie(res, result.tokens.refreshToken);
-            
-            // [DEBUG] Log Output (Ẩn token nhạy cảm)
-            debugLog('SYNC_PHONE_OUTPUT', { 
-                customer: result.customer, 
-                requirePasswordSet: result.requirePasswordSet 
-            });
-
-            return res.status(200).json({
+            // 2. Trả về Access Token + Info
+            res.status(200).json({
                 success: true,
-                message: 'Phone authentication successful',
+                message: "Đăng nhập Zalo thành công",
                 data: {
                     customer: result.customer,
-                    accessToken: result.tokens.accessToken, // Chỉ trả Access Token về Body
-                    requirePasswordSet: result.requirePasswordSet
-                }
+                    accessToken: result.tokens.accessToken,
+                    // Cờ này báo cho FE biết user này có cần cập nhật SĐT hay không
+                    requirePhoneCheck: result.requirePhoneCheck 
+                },
+                timestamp: new Date().toISOString(),
             });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
+
+        } catch (error) {
+            next(error);
         }
     }
 
-    // 3. ĐĂNG NHẬP SOCIAL
-    async loginWithSocial(req: Request, res: Response, next: NextFunction) {
+    // ============================================================
+    // 2. SOCIAL LOGIN (Google / Facebook)
+    // ============================================================
+    // POST /api/cs/auth/social-login
+    async socialLogin(req: Request, res: Response, next: NextFunction) {
         try {
-            const { uid, email, name, avatar, provider } = req.body as SocialLoginInput;
-            const providerEnum: AuthProvider = provider === 'FACEBOOK' ? AuthProvider.FACEBOOK : AuthProvider.GOOGLE; 
+            // Frontend gửi thông tin user sau khi login Firebase/Google xong
+            const { uid, email, name, avatar, provider } = req.body;
 
-            // [DEBUG] Log Input
-            debugLog('LOGIN_SOCIAL_INPUT', { uid, email, provider });
+            if (!uid || !provider) throw new BadRequestError("Dữ liệu đăng nhập không hợp lệ");
 
+            // Gọi Service: syncSocialAccount
             const result = await customerAuthService.syncSocialAccount({
-                uid,
-                email,
-                name: name || '',
-                avatar: avatar || '',
-                provider: providerEnum
+                uid, email, name, avatar, provider
             });
 
-            console.log('SOCIAL_LOGIN_RESULT', result);
+            // 1. Lưu Refresh Token vào Cookie
+            res.cookie(COOKIE_NAME, result.tokens.refreshToken, COOKIE_OPTIONS);
 
-            // ✅ Set Cookie Refresh Token
-            this.setRefreshTokenCookie(res, result.tokens.refreshToken);
-
-            // [DEBUG] Log Output
-            debugLog('LOGIN_SOCIAL_OUTPUT', { 
-                customer: result.customer,
-                requirePhoneCheck: result.requirePhoneCheck
-            });
-
-            return res.status(200).json({
+            // 2. Trả về kết quả
+            res.status(200).json({
                 success: true,
-                message: 'Social login successful',
+                message: `Đăng nhập ${provider} thành công`,
                 data: {
                     customer: result.customer,
                     accessToken: result.tokens.accessToken,
                     requirePhoneCheck: result.requirePhoneCheck
                 },
-            });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
-        }
-    }
-
-    // 4. ĐĂNG NHẬP BẰNG MẬT KHẨU
-    async loginWithPassword(req: Request, res: Response, next: NextFunction) {
-        try {
-            const { phone, password } = req.body as LoginPasswordInput; 
-            const ipAddress = req.ip;
-
-            // [DEBUG] Log Input
-            debugLog('LOGIN_PASSWORD_INPUT', { phone, ip: ipAddress });
-            
-            const result = await customerAuthService.loginWithPassword(phone, password);
-            
-            // ✅ Set Cookie Refresh Token
-            this.setRefreshTokenCookie(res, result.tokens.refreshToken);
-
-            // [DEBUG] Log Output
-            debugLog('LOGIN_PASSWORD_OUTPUT', { customer: result.customer });
-
-            return res.status(200).json({
-                success: true,
-                message: 'Login successful',
-                data: {
-                    customer: result.customer,
-                    accessToken: result.tokens.accessToken
-                }
-            });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
-        }
-    }
-
-    // 5. ĐẶT MẬT KHẨU (Sau khi verify OTP/Social lần đầu)
-    async setPassword(req: Request, res: Response, next: NextFunction) {
-        try {
-            const { phone, password, uid } = req.body as SetPasswordInput;
-            
-            // [DEBUG] Log Input
-            debugLog('SET_PASSWORD_INPUT', { phone, uid });
-
-            const result = await customerAuthService.setPassword(phone, uid, password);
-            
-            // ✅ Set Password xong thì tự động login luôn -> Set Cookie
-            if (result.tokens) {
-                this.setRefreshTokenCookie(res, result.tokens.refreshToken);
-            }
-
-            // [DEBUG] Log Output
-            debugLog('SET_PASSWORD_OUTPUT', { message: result.message });
-
-            return res.status(200).json({
-                success: true,
-                message: result.message,
-                data: {
-                    // Trả về tokens mới để client cập nhật state mà không cần login lại
-                    accessToken: result.tokens?.accessToken 
-                }
-            });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
-        }
-    }
-
-    // 6. REFRESH TOKEN (SỬA ĐỔI LỚN: ĐỌC TỪ COOKIE)
-    async refreshToken(req: Request, res: Response, next: NextFunction) {
-        try {
-            // ✅ Lấy token từ Cookie thay vì Body
-            const refreshToken = req.cookies['c_refresh_token']; 
-
-            // [DEBUG] Log Input
-            debugLog('REFRESH_TOKEN_INPUT', { 
-                hasCookie: !!refreshToken, 
-                tokenPreview: refreshToken ? `${refreshToken.substring(0, 10)}...` : 'null' 
-            });
-
-            if (!refreshToken) {
-                return res.status(401).json({ success: false, message: 'No session token' });
-            }
-
-            const tokens = await customerAuthService.refreshAccessToken(refreshToken);
-            
-            // ✅ Rotation: Set lại cookie mới
-            this.setRefreshTokenCookie(res, tokens.refreshToken);
-
-            // [DEBUG] Log Output
-            debugLog('REFRESH_TOKEN_OUTPUT', { newAccessToken: `${tokens.accessToken.substring(0, 10)}...` });
-
-            return res.status(200).json({
-                success: true,
-                data: { accessToken: tokens.accessToken }
-            });
-        } catch (error) {
-            // Nếu lỗi (hết hạn, không hợp lệ) -> Xóa cookie để client logout
-            res.clearCookie('c_refresh_token');
-            debugLog('REFRESH_TOKEN_ERROR', error);
-            return next(error); // ✅ Đã thêm return
-        }
-    }
-
-    // 7. GET PROFILE (Yêu cầu Auth Middleware)
-    async getAccountById(req: AuthRequest, res: Response, next: NextFunction) {
-        try {
-            const customerId = req.user?.id; 
-            
-            // [DEBUG] Log Input
-            debugLog('GET_PROFILE_INPUT', { customerId });
-
-            if (!customerId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-            const account = await customerAuthService.getAccountByCustomerId(customerId);
-            
-            // [DEBUG] Log Output
-            debugLog('GET_PROFILE_OUTPUT', { accountId: account.id, customerName: account.customer.customerName });
-
-            return res.status(200).json({
-                success: true,
-                data: account,
                 timestamp: new Date().toISOString(),
             });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
+
+        } catch (error) {
+            next(error);
         }
     }
 
-    
-
-    // 8. ĐĂNG XUẤT (MỚI)
-    async logout(req: AuthRequest, res: Response, next: NextFunction) {
+    // ============================================================
+    // 3. REFRESH TOKEN
+    // ============================================================
+    // POST /api/cs/auth/refresh-token
+    async refreshToken(req: Request, res: Response, next: NextFunction) {
         try {
-            const authHeader = req.headers.authorization;
-            const accessToken = authHeader && authHeader.startsWith('Bearer ') 
-                ? authHeader.substring(7) 
-                : '';
-            
-            const customerId = req.user?.id;
+            // Lấy token từ Cookie (Thay vì Body)
+            const refreshToken = req.cookies[COOKIE_NAME];
 
-            // [DEBUG] Log Input
-            debugLog('LOGOUT_INPUT', { customerId, hasAccessToken: !!accessToken });
-
-            if (customerId && accessToken) {
-                // Gọi service để blacklist token và xóa redis session
-                await customerAuthService.logout(customerId, accessToken);
+            if (!refreshToken) {
+                throw new AuthenticationError('Phiên đăng nhập đã hết hạn hoặc không tồn tại');
             }
 
-            // ✅ Luôn xóa Cookie ở trình duyệt
-            res.clearCookie('c_refresh_token', {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                path: '/'
+            // Gọi Service verify và cấp lại token
+            const tokens = await customerAuthService.refreshAccessToken(refreshToken);
+
+            // 1. Cập nhật Cookie mới (Token Rotation)
+            res.cookie(COOKIE_NAME, tokens.refreshToken, COOKIE_OPTIONS);
+
+            // 2. Trả về Access Token mới
+            res.status(200).json({
+                success: true,
+                data: {
+                    accessToken: tokens.accessToken,
+                    expiresIn: 15 * 60, // 15 phút
+                },
+                timestamp: new Date().toISOString(),
             });
 
-            return res.status(200).json({
+        } catch (error) {
+            // Nếu lỗi (Hết hạn, token fake) -> Xóa cookie để logout hẳn
+            res.clearCookie(COOKIE_NAME, { ...COOKIE_OPTIONS, maxAge: 0 });
+            next(error);
+        }
+    }
+
+    // ============================================================
+    // 4. LOGOUT
+    // ============================================================
+    // POST /api/cs/auth/logout
+    async logout(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            // req.user có được nhờ middleware xác thực (AuthGuard)
+            const userId = req.user?.id; 
+            const accessToken = req.headers.authorization?.substring(7) || ''; 
+
+            if (userId) {
+                // Gọi Service để xóa session Redis
+                await customerAuthService.logout(userId, accessToken);
+            }
+
+            // Xóa Cookie trình duyệt
+            res.clearCookie(COOKIE_NAME, { ...COOKIE_OPTIONS, maxAge: 0 });
+
+            res.status(200).json({
                 success: true,
-                message: 'Logged out successfully'
+                message: "Đăng xuất thành công",
+                timestamp: new Date().toISOString(),
             });
-        } catch (error) { 
-            return next(error); // ✅ Đã thêm return
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    // ============================================================
+    // 6. CHECK PHONE EXISTENCE (Dùng cho UI cập nhật SĐT)
+    // ============================================================
+    // POST /api/cs/auth/check-phone
+    async checkPhone(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { phone } = req.body;
+            if(!phone) throw new BadRequestError("Vui lòng nhập số điện thoại");
+
+            const result = await customerAuthService.checkPhoneExistence(phone);
+
+            res.status(200).json({
+                success: true,
+                data: result, // { exists: true/false }
+            });
+        } catch (error) {
+            next(error);
         }
     }
 }

@@ -43,6 +43,7 @@ import cashFundRoutes from '@routes/cash-fund.routes';
 import promotionRoutes from '@routes/promotion.routes';
 import attendanceRoutes from '@routes/attendance.routes';
 import salaryRoutes from '@routes/salary.routes';
+import overtimeRoutes from '@routes/overtime.routes';
 import notificationRoutes from '@routes/notification.routes';
 import reportRoutes from '@routes/report.routes';
 import financeRoutes from '@routes/finance.routes';
@@ -65,10 +66,14 @@ import cs_product_Routes from '@routes/cs-product.routes';
 // News routes
 import newsRoutes from '@routes/news.routes';
 import newsCategoryRoutes from '@routes/news-category.routes';
-import newsTagRoutes from '@routes/news-tag.routes';
 
 // Contact routes
+// Contact routes
 import contactRoutes from '@routes/contact.routes';
+
+// CRM Routes
+import ticketRoutes from '@routes/ticket.routes';
+import taskRoutes from '@routes/task.routes';
 
 // Import notification scheduler
 import notificationScheduler from '@schedulers/notification.scheduler';
@@ -222,6 +227,8 @@ app.use('/api/cash-fund', cashFundRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/salary', salaryRoutes);
+app.use('/api/overtime', overtimeRoutes);
+app.use('/api/overtime', overtimeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/finance', financeRoutes);
@@ -234,7 +241,7 @@ app.use('/api/settings/login-history', loginHistoryRoutes);
 // Smart Debt routes
 app.use('/api/smart-debt', smartDebtRoutes);
 //custommer service routes
-app.use('/api/cs/accounts', cs_authRoutes);
+app.use('/api/cs/auth', cs_authRoutes);
 app.use('/api/cs/categories', cs_categoryRoutes);
 app.use('/api/cs/products', cs_productRoutes);
 app.use('/api/cs/inventory', cs_inventoryRoutes);
@@ -245,8 +252,13 @@ app.use('/api/cs/products', cs_product_Routes);
 
 // News routes
 app.use('/api/news', newsRoutes);
+// News routes
+app.use('/api/news', newsRoutes);
 app.use('/api/news-categories', newsCategoryRoutes);
-app.use('/api/news-tags', newsTagRoutes);
+
+// CRM Routes
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

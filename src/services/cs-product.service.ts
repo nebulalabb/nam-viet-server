@@ -2,49 +2,14 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError } from '@utils/errors';
 import RedisService from './redis.service';
 import { serializeBigInt } from '@utils/serializer';
-
+import { PublicProductDto,
+   PublicProductDetailDto
+} from '@custom-types/cs-product.type';
+import { PromotionInfo } from '@custom-types/cs-promotion.type';
 const prisma = new PrismaClient();
 const redis = RedisService.getInstance();
 
 const STORE_CACHE_TTL = 600;
-
-export interface PromotionInfo {
-  id: number;
-  name: string;
-  type: string;
-  value?: number;
-  giftName?: string;
-  endDate: Date;
-}
-
-export interface PublicProductDto {
-  id: number;
-  name: string;
-  sku: string;
-  slug: string;
-  image: string;
-  unit: string;
-  originalPrice: number;
-  salePrice: number;
-  discountPercentage: number;
-  isFeatured: boolean;
-  inStock: boolean;
-  category: { id: number; name: string; slug: string };
-  promotion?: PromotionInfo | null;
-}
-
-export interface PublicProductDetailDto extends PublicProductDto {
-  description?: string;
-  barcode?: string;
-  weight?: number;
-  dimensions?: string;
-  packagingType?: string;
-  images: Array<{ url: string; alt?: string; isPrimary: boolean }>;
-  videos: Array<{ url: string; thumbnail?: string; title?: string }>;
-  availablePromotions: PromotionInfo[];
-  relatedProducts?: PublicProductDto[];
-}
-
 class StoreProductService {
 
   async getPublicProducts(params: {
@@ -53,15 +18,19 @@ class StoreProductService {
     search?: string;
     categoryId?: number;
     isFeatured?: boolean;
+    historySearch?: string[];
     sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'bestseller';
     packagingType?: 'bottle' | 'box' | 'bag' | 'label' | 'other';
-    userType?: 'retail' | 'wholesale' | 'vip';
   }) {
     const { 
-      page = 1, limit = 20, search, categoryId, isFeatured, sortBy = 'newest',
-      packagingType, userType = 'retail' 
+      page = 1, limit = 20, search, categoryId, sortBy = 'newest',
+      historySearch,
+      packagingType 
     } = params;
     
+    const cleanedHistorySearch = historySearch?.map(h => this.normalizeText(h))
+
+
     const offset = (page - 1) * limit;
     const cacheKey = `store:products:${JSON.stringify(params)}`;
     const cached = await redis.get(cacheKey);
@@ -70,7 +39,7 @@ class StoreProductService {
     const where: Prisma.ProductWhereInput = {
       status: 'active',
       productType: { in: ['finished_product', 'goods'] },
-      ...(isFeatured !== undefined && {  isFeatured }),
+      // ...(isFeatured !== undefined && {  isFeatured }),
       ...(categoryId && { categoryId }),
       ...(packagingType && { packagingType: packagingType as any }),
       ...(search && {
@@ -84,10 +53,9 @@ class StoreProductService {
     let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' };
     if (sortBy === 'price_asc') orderBy = { sellingPriceRetail: 'asc' }; 
     if (sortBy === 'price_desc') orderBy = { sellingPriceRetail: 'desc' };
-    if (sortBy === 'bestseller') orderBy = { id: 'desc' };
+    if (sortBy === 'newest') orderBy = { createdAt: 'desc' };
 
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
+    const products = await prisma.product.findMany({
         where,
         skip: offset,
         take: limit,
@@ -99,11 +67,18 @@ class StoreProductService {
           slug: true,
           sellingPriceRetail: true,
           unit: true,
-          
           images: {
             where: { isPrimary: true },
             take: 1,
             select: { imageUrl: true, altText: true }
+          },
+          videos: {
+            where: { isPrimary: true },
+            take: 1,
+            select: {
+              videoUrl: true,
+              videoType: true,
+            }
           },
           category: { select: { id: true, categoryName: true, slug: true } },
           inventory: { select: { quantity: true, reservedQuantity: true } },
@@ -130,12 +105,33 @@ class StoreProductService {
             }
           }
         }
-      }),
-      prisma.product.count({ where })
-    ]);
+      });
 
-    const mappedProducts: PublicProductDto[] = products.map((p: any) => {
-      const basePrice = this.determineBasePrice(p, userType);
+    const total = await prisma.product.count({ where });
+
+    let rankedProducts = products;
+
+    if (!search && cleanedHistorySearch && cleanedHistorySearch.length > 0) {
+      rankedProducts = products
+        .map(p => {
+          const percents = cleanedHistorySearch.map(keyword =>
+            this.similarityPercent(p.productName, keyword)
+          );
+
+          const bestPercent = Math.max(...percents);
+
+          return {
+            ...p,
+            __matchPercent: bestPercent
+          };
+        })
+        .sort((a, b) => b.__matchPercent - a.__matchPercent);
+    }
+
+    const pagedProducts = rankedProducts.slice(offset, offset + limit);
+
+    const mappedProducts: PublicProductDto[] = pagedProducts.map((p: any) => {
+      const basePrice = Number(p.sellingPriceRetail || 0);
       
       const totalStock = p.inventory 
         ? p.inventory.reduce((sum: number, inv: any) => {
@@ -152,6 +148,8 @@ class StoreProductService {
         sku: p.sku,
         slug: p.slug || '',
         image: (p.images && p.images.length > 0) ? p.images[0].imageUrl : '/placeholder.png',
+        video: (p.videos && p.videos.length > 0) ? p.videos[0].videoUrl : '/placeholder-video.mp4',
+        videoType: (p.videos && p.videos.length > 0) ? p.videos[0].videoType : 'review',
         unit: p.unit,
         originalPrice: basePrice,
         salePrice: salePrice,
@@ -183,13 +181,13 @@ class StoreProductService {
     return result;
   }
 
-  async getProductDetail(id: number, userType: 'retail' | 'wholesale' | 'vip' = 'retail') {
-    const cacheKey = `store:product:detail:${id}:${userType}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) return cached;
+  async getProductDetail(slug: string) {
+    const cacheKey = `store:product:detail:${slug}`;
+    // const cached = await redis.get(cacheKey);
+    // if (cached) return cached;
 
     const product = await prisma.product.findUnique({
-      where: { id, status: 'active', productType: { in: ['finished_product', 'goods'] } },
+      where: { slug, status: 'active', productType: { in: ['finished_product', 'goods'] } },
       select: {
         id: true,
         productName: true,
@@ -204,7 +202,7 @@ class StoreProductService {
         weight: true,
         dimensions: true,
         packagingType: true,
-        isFeatured: true,
+        // isFeatured: true,
         
         category: { select: { id: true, categoryName: true, slug: true } },
         images: {
@@ -240,12 +238,16 @@ class StoreProductService {
       }
     });
 
+
+    
+
     if (!product) throw new NotFoundError('Sản phẩm không tồn tại');
 
-    const basePrice = this.determineBasePrice(product, userType);
+    const basePrice = Number(product.sellingPriceRetail);
     const totalStock = product.inventory 
       ? product.inventory.reduce((sum: number, inv: any) => sum + Math.max(0, Number(inv.quantity) - Number(inv.reservedQuantity)), 0)
       : 0;
+
 
     const { salePrice, discountInfo, allPromotions } = this.calculateBestPrice(basePrice, product.promotionProducts);
 
@@ -254,13 +256,12 @@ class StoreProductService {
       name: product.productName,
       sku: product.sku,
       slug: product.slug || '',
-      image: (product.images && product.images.length > 0) ? product.images[0].imageUrl : '/placeholder.png',
       unit: product.unit,
       originalPrice: basePrice,
       salePrice: salePrice,
       discountPercentage: (discountInfo && discountInfo.type !== 'gift')
           ? Math.round(((basePrice - salePrice) / basePrice) * 100) : 0,
-      isFeatured: product.isFeatured,
+      // isFeatured: product.isFeatured,
       inStock: totalStock > 0,
       category: {
         id: product.category?.id || 0,
@@ -284,19 +285,42 @@ class StoreProductService {
         thumbnail: v.thumbnail || undefined,
         title: v.title || undefined
       })),
-      relatedProducts: [] 
     };
 
     await redis.set(cacheKey, serializeBigInt(result), STORE_CACHE_TTL);
     return result;
   }
 
-  // --- Helpers ---
-  private determineBasePrice(product: any, userType: string): number {
-    if (userType === 'wholesale' && product.sellingPriceWholesale) return Number(product.sellingPriceWholesale);
-    if (userType === 'vip' && product.sellingPriceVip) return Number(product.sellingPriceVip);
-    return Number(product.sellingPriceRetail || 0);
+
+
+  private normalizeText(text: string) {
+    return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   }
+
+
+  private similarityPercent(a: string, b: string): number {
+    const A = this.normalizeText(a);
+    const B = this.normalizeText(b);
+
+    if (!A || !B) return 0;
+
+    const setA = new Set(A.split(" "));
+    const setB = new Set(B.split(" "));
+
+    const intersection = [...setA].filter(x => setB.has(x));
+
+    const percent = (intersection.length / Math.min(setA.size, setB.size)) * 100;
+
+    return Math.min(100, Math.round(percent));
+  }
+
+
 
   private calculateBestPrice(originalPrice: number, activePromotions: any[]) {
     let bestPrice = originalPrice;

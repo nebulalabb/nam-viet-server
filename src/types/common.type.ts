@@ -35,6 +35,8 @@ export enum ErrorCode {
   RATE_LIMIT_ERROR = 'RATE_LIMIT_ERROR',
   INTERNAL_ERROR = 'INTERNAL_ERROR',
   DATABASE_ERROR = 'DATABASE_ERROR',
+
+  BAD_REQUEST = 'BAD_REQUEST',
 }
 
 export interface ApiResponse<T = any> {
