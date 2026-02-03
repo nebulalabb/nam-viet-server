@@ -428,15 +428,15 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: 'leeminhkang@gmail.com' }, { employeeCode: 'NV-0001' }],
+      OR: [{ email: 'nhoangkha03@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
   });
 
   if (!adminUser) {
     adminUser = await prisma.user.create({
       data: {
-        employeeCode: 'NV-0001',
-        email: 'leeminhkang@gmail.com',
+        employeeCode: 'NV-00010',
+        email: 'nhoangkha03@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',

@@ -20,7 +20,7 @@ export const promotionStatusEnum = z.enum(['pending', 'active', 'expired', 'canc
 
 // Conditions Schema (JSON)
 export const conditionsSchema = z.object({
-  applicable_categories: z.array(z.number()).optional(),
+  applicables_categories: z.array(z.number()).optional(),
   applicable_customer_types: z.array(z.string()).optional(),
   days_of_week: z.array(z.number().min(0).max(6)).optional(),
   time_slots: z.array(z.string()).optional(),
@@ -64,16 +64,16 @@ export const createPromotionSchema = z.object({
   applicableTo: applicableToEnum,
   minOrderValue: z.number().min(0).optional(),
   minQuantity: z.number().min(0).optional(),
-  conditions: conditionsSchema,
+  conditions: conditionsSchema.optional(),
   quantityLimit: z.number().min(1).optional(),
   products: z
     .array(
       z.object({
-        productId: z.number().min(1),
+        productId: z.number().min(0),
         discountValueOverride: z.number().min(0).optional(),
         minQuantity: z.number().min(1).optional(),
         giftProductId: z.number().min(1).optional(),
-        giftQuantity: z.number().min(1).optional(),
+        giftQuantity: z.number().optional(),
         note: z.string().max(255).optional(),
       })
     )
@@ -100,7 +100,7 @@ export const updatePromotionSchema = z.object({
   isRecurring: z.boolean().optional(),
   minOrderValue: z.number().min(0).optional(),
   minQuantity: z.number().min(0).optional(),
-  conditions: conditionsSchema,
+  conditions: conditionsSchema.optional(),
   quantityLimit: z.number().min(1).optional(),
   products: z
     .array(

@@ -42,6 +42,11 @@ router.post(
   asyncHandler(promotionController.autoExpire.bind(promotionController))
 );
 
+router.get(
+  '/statistics',
+  authorize('view_promotions'),
+  asyncHandler(promotionController.getStatistics.bind(promotionController))
+);
 // GET /api/promotions/:id - Get promotion by ID
 router.get(
   '/:id',

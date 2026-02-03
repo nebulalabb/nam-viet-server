@@ -32,6 +32,7 @@ class PromotionService {
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
+    console.log("aaaaaaa")
 
     const pageNum = Number(page);
     const limitNum = Number(limit);
@@ -58,21 +59,21 @@ class PromotionService {
       ...(applicableTo && { applicableTo }),
       ...(startDate &&
         endDate && {
-          OR: [
-            {
-              startDate: {
-                gte: new Date(startDate),
-                lte: new Date(endDate),
-              },
+        OR: [
+          {
+            startDate: {
+              gte: new Date(startDate),
+              lte: new Date(endDate),
             },
-            {
-              endDate: {
-                gte: new Date(startDate),
-                lte: new Date(endDate),
-              },
+          },
+          {
+            endDate: {
+              gte: new Date(startDate),
+              lte: new Date(endDate),
             },
-          ],
-        }),
+          },
+        ],
+      }),
       ...(isActive === 'true' && {
         status: 'active',
         startDate: { lte: new Date() },
@@ -250,6 +251,9 @@ class PromotionService {
 
   // Create new promotion
   async create(data: CreatePromotionInput, userId: number) {
+
+
+
     const existingCode = await prisma.promotion.findUnique({
       where: { promotionCode: data.promotionCode },
     });
@@ -257,65 +261,125 @@ class PromotionService {
     if (existingCode) {
       throw new ConflictError('Mã khuyến mãi đã tồn tại');
     }
+    if (!data.startDate || !data.endDate) {
+      throw new Error('startDate and endDate are required');
+    }
 
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+
+    if (start > end) {
+      throw new Error('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
     // Validate promotion type specific fields
     this.validatePromotionType(data);
+    console.log(typeof (data.products?.[0].productId))
+    if (data.applicableTo === "all" && data.products?.[0]?.productId === 0) {
+      const promotion = await prisma.promotion.create({
+        data: {
+          promotionCode: data.promotionCode,
+          promotionName: data.promotionName,
+          promotionType: data.promotionType,
+          discountValue: data.discountValue,
+          maxDiscountValue: data.maxDiscountValue,
+          startDate: new Date(data.startDate),
+          endDate: new Date(data.endDate),
+          isRecurring: data.isRecurring || false,
+          applicableTo: data.applicableTo,
+          minOrderValue: data.minOrderValue || 0,
+          minQuantity: data.minQuantity || 0,
+          conditions: data.conditions || Prisma.JsonNull,
+          quantityLimit: data.quantityLimit,
+          createdBy: userId,
+        },
+        select: {
+          id: true,
+          promotionCode: true
+        }
+      });
 
-    const promotion = await prisma.promotion.create({
-      data: {
-        promotionCode: data.promotionCode,
-        promotionName: data.promotionName,
-        promotionType: data.promotionType,
-        discountValue: data.discountValue,
-        maxDiscountValue: data.maxDiscountValue,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
-        isRecurring: data.isRecurring || false,
-        applicableTo: data.applicableTo,
-        minOrderValue: data.minOrderValue || 0,
-        minQuantity: data.minQuantity || 0,
-        conditions: data.conditions || Prisma.JsonNull,
-        quantityLimit: data.quantityLimit,
-        createdBy: userId,
-        ...(data.products && {
+      (await prisma.product.findMany({
+        select: {
+          id: true,
+        }
+      })).map((async ({ id }) => {
+        return await prisma.promotionProduct.create({
+          data: {
+            promotionId: promotion.id,
+            productId: id,
+            giftProductId: data.products?.[0].giftProductId,
+            giftQuantity: data.products?.[0].giftQuantity
+          }
+        })
+      }))
+
+      logActivity('create', userId, 'promotions', {
+        id: promotion.id,
+        code: promotion.promotionCode,
+      });
+
+      await redis.flushPattern('promotion:list:*');
+
+      return promotion;
+    }
+    else {
+      const promotion = await prisma.promotion.create({
+        data: {
+          promotionCode: data.promotionCode,
+          promotionName: data.promotionName,
+          promotionType: data.promotionType,
+          discountValue: data.discountValue,
+          maxDiscountValue: data.maxDiscountValue,
+          startDate: new Date(data.startDate),
+          endDate: new Date(data.endDate),
+          isRecurring: data.isRecurring || false,
+          applicableTo: data.applicableTo,
+          minOrderValue: data.minOrderValue || 0,
+          minQuantity: data.minQuantity || 0,
+          conditions: data.conditions || Prisma.JsonNull,
+          quantityLimit: data.quantityLimit,
+          createdBy: userId,
+
+          ...(data.products && {
+            products: {
+              create: data.products.map((p) => ({
+                productId: p.productId,
+                discountValueOverride: p.discountValueOverride,
+                minQuantity: p.minQuantity || 1,
+                giftProductId: p.giftProductId,
+                giftQuantity: p.giftQuantity || 0,
+                note: p.note,
+              })),
+            },
+          }),
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeCode: true,
+            },
+          },
           products: {
-            create: data.products.map((p) => ({
-              productId: p.productId,
-              discountValueOverride: p.discountValueOverride,
-              minQuantity: p.minQuantity || 1,
-              giftProductId: p.giftProductId,
-              giftQuantity: p.giftQuantity || 0,
-              note: p.note,
-            })),
-          },
-        }),
-      },
-      include: {
-        creator: {
-          select: {
-            id: true,
-            fullName: true,
-            employeeCode: true,
+            include: {
+              product: true,
+              giftProduct: true,
+            },
           },
         },
-        products: {
-          include: {
-            product: true,
-            giftProduct: true,
-          },
-        },
-      },
-    });
+      });
 
-    // Log activity
-    logActivity('create', userId, 'promotions', {
-      id: promotion.id,
-      code: promotion.promotionCode,
-    });
+      // Log activity
+      logActivity('create', userId, 'promotions', {
+        id: promotion.id,
+        code: promotion.promotionCode,
+      });
 
-    await redis.flushPattern('promotion:list:*');
+      await redis.flushPattern('promotion:list:*');
 
-    return promotion;
+      return promotion;
+    }
   }
 
   // Update promotion
@@ -332,6 +396,18 @@ class PromotionService {
       throw new NotFoundError('Khuyến mãi');
     }
 
+    if (!data.startDate || !data.endDate) {
+      throw new Error('startDate and endDate are required');
+    }
+
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+
+    if (start > end) {
+      throw new Error('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
+
+
     // Cannot update if already active or expired
     if (existing.status === 'active' || existing.status === 'expired') {
       throw new ValidationError(`Không thể cập nhật khuyến mãi có trạng thái: ${existing.status}`);
@@ -339,6 +415,7 @@ class PromotionService {
 
     // If products are provided, delete old and create new
     const updateData: any = {
+      // ...(data.po)
       ...(data.promotionName && { promotionName: data.promotionName }),
       ...(data.discountValue !== undefined && { discountValue: data.discountValue }),
       ...(data.maxDiscountValue !== undefined && {
@@ -801,13 +878,14 @@ class PromotionService {
         break;
 
       case 'buy_x_get_y': {
-        const conditions = data.conditions as PromotionConditions | undefined;
+        const conditions = data.products as PromotionConditions | undefined;
+        // console.log("điều kiện", conditions, data.minQuantity)
         if (
           !conditions ||
-          !conditions.buy_quantity ||
-          !conditions.get_quantity ||
-          conditions.buy_quantity <= 0 ||
-          conditions.get_quantity <= 0
+          !data.minQuantity ||
+          !data.products?.[0]?.giftQuantity ||
+          data.minQuantity <= 0 ||
+          data.products?.[0]?.giftQuantity <= 0
         ) {
           throw new ValidationError(
             'Khuyến mãi Mua X Tặng Y yêu cầu buy_quantity và get_quantity hợp lệ trong điều kiện'
@@ -862,6 +940,54 @@ class PromotionService {
 
     return promotion;
   }
+  // Promotion statistics (for dashboard)
+  async getStatistics() {
+    const cacheKey = 'promotion:statistics';
+
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
+      return cached;
+    }
+
+    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
+
+    const promotions = await prisma.promotion.findMany({
+      where: { deletedAt: null },
+      select: {
+        status: true,
+        usageCount: true,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+      },
+    });
+
+    const now = new Date();
+    const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const statistics = {
+      totalPromotions: promotions.length,
+      activePromotions: promotions.filter(p => p.status === 'active').length,
+      pendingPromotions: promotions.filter(p => p.status === 'pending').length,
+      expiredPromotions: promotions.filter(p => p.status === 'expired').length,
+      cancelledPromotions: promotions.filter(p => p.status === 'cancelled').length,
+      expiringSoon: promotions.filter(
+        p =>
+          p.status === 'active' &&
+          p.endDate >= threeDaysLater &&
+          p.endDate <= sevenDaysLater
+      ).length,
+      totalUsage: promotions.reduce((sum, p) => sum + p.usageCount, 0),
+    };
+
+    await redis.set(cacheKey, statistics, 300); // cache 5 phút
+
+    return statistics;
+  }
+
+
 }
 
 export default new PromotionService();

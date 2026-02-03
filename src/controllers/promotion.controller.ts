@@ -57,10 +57,31 @@ class PromotionController {
     }
   }
 
+  async getStatistics(_req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const statistics = await promotionService.getStatistics();
+
+      res.json({
+        success: true,
+        data: statistics,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({
+        success: false,
+        error: {
+          code: error.code || 'INTERNAL_ERROR',
+          message: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+  }
   // POST /api/promotions - Create new promotion
   async create(req: AuthRequest, res: Response): Promise<void> {
     try {
       const data = req.body as CreatePromotionInput;
+      console.log("concocquy", data)
       const userId = req.user!.id;
 
       const promotion = await promotionService.create(data, userId);

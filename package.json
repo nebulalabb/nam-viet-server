@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed-finance.ts",
+    "prisma:seed": "ts-node prisma/seed-promotion.ts",
     "prisma:seed-hovtoi": "ts-node prisma/seed-hovtoi.ts",
     "prisma:seed-admin": "ts-node prisma/seed-admin.ts",
     "test:redis": "ts-node -r tsconfig-paths/register src/test/test-redis.ts",
@@ -54,7 +54,8 @@
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^4.1.12"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
@@ -80,7 +81,6 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.18.3",
-    "xlsx": "^0.18.5",
-    "zod": "^4.1.12"
+    "xlsx": "^0.18.5"
   }
 }
