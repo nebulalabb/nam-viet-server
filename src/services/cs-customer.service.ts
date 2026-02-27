@@ -1,6 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { ConflictError, NotFoundError, ValidationError } from '@utils/errors';
-import RedisService, { CachePrefix } from '@services/redis.service';
 import {
     UpdateCustomerInput,
     // Không cần import các Input dành cho Admin như CreateCustomerInput, CustomerQueryInput
@@ -9,9 +8,6 @@ import { calculateDebtMetrics } from '@utils/debt.util';
 
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CUSTOMER_CACHE_TTL = 3600;
 
 class CustomerService {
 
@@ -49,11 +45,6 @@ class CustomerService {
     // Khách hàng sẽ lấy thông tin của chính họ qua ID từ Token
     // ========================================================
     async getById(id: number) {
-        const cacheKey = `${CachePrefix.USER}customer:${id}`;
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
 
         const customer = await prisma.customer.findUnique({
             where: { id },
@@ -94,7 +85,6 @@ class CustomerService {
             ...debtMetrics, // Spread các thuộc tính: debtPercentage, isOverLimit, v.v.
         };
 
-        await redis.set(cacheKey, customerWithDebtInfo, CUSTOMER_CACHE_TTL);
         return customerWithDebtInfo;
     }
 
@@ -185,9 +175,6 @@ class CustomerService {
                 updatedAt: new Date(),
             },
         });
-
-        // Xóa cache
-        await redis.del(`${CachePrefix.USER}customer:${id}`);
 
         return updatedCustomer;
     }

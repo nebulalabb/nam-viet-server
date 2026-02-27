@@ -3,12 +3,10 @@ import { AuthRequest } from '@custom-types/common.type';
 import { asyncHandler } from './errorHandler';
 import { PrismaClient } from '@prisma/client';
 import { AuthenticationError, AuthorizationError } from '@utils/errors';
-import RedisService from '@services/redis.service';
+import { tokenBlacklist } from '@services/auth.service';
 import { verifyAccessToken } from '@utils/jwt';
 
 const prisma = new PrismaClient();
-
-const redis = RedisService.getInstance();
 
 export const authentication = asyncHandler(
   async (req: AuthRequest, _res: Response, next: NextFunction) => {
@@ -20,9 +18,7 @@ export const authentication = asyncHandler(
 
     const token = authHeader.substring(7);
 
-    const isBlacklisted = await redis.get(`blacklist:${token}`);
-
-    if (isBlacklisted) {
+    if (tokenBlacklist.has(token)) {
       throw new AuthenticationError('Token has been revoked');
     }
 

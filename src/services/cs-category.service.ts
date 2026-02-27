@@ -1,16 +1,11 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError } from '@utils/errors';
-import RedisService from './redis.service';
 import type {
     QueryCategoriesInput,
     // Bỏ qua CreateCategoryInput, UpdateCategoryInput
 } from '@validators/category.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CATEGORY_CACHE_TTL = 3600;
-const CATEGORY_LIST_CACHE_TTL = 600;
 
 class PublicCategoryService {
 
@@ -23,7 +18,7 @@ class PublicCategoryService {
             limit = '20',
             search,
             parentId,
-            // status, // Biến này chỉ được dùng trong cacheKey, không dùng trong where
+            // status, // Biến này không dùng trong where
             sortBy = 'categoryName', // Mặc định sắp xếp thân thiện hơn với Khách hàng
             sortOrder = 'asc',
         } = query;
@@ -34,13 +29,6 @@ class PublicCategoryService {
 
         // Ép buộc chỉ lấy danh mục đang hoạt động
         const forcedStatus: 'active' = 'active';
-
-        const cacheQuery = { ...query, status: forcedStatus }; // Đảm bảo cache key chứa status active
-        const cacheKey = `category:public:list:${JSON.stringify(cacheQuery)}`;
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
 
         const where: Prisma.CategoryWhereInput = {
             status: forcedStatus, // Luôn luôn là active
@@ -91,8 +79,6 @@ class PublicCategoryService {
             },
         };
 
-        await redis.set(cacheKey, result, CATEGORY_LIST_CACHE_TTL);
-
         return result;
     }
 
@@ -100,11 +86,6 @@ class PublicCategoryService {
     // 2. GET CATEGORY TREE (Cây danh mục)
     // ========================================================
     async getCategoryTree() {
-        const cacheKey = 'category:public:tree';
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
 
         const categories = await prisma.category.findMany({
             // Luôn luôn lọc status: 'active'
@@ -125,8 +106,6 @@ class PublicCategoryService {
 
         const tree = this.buildTree(categories, null);
 
-        await redis.set(cacheKey, tree, CATEGORY_CACHE_TTL);
-
         return tree;
     }
 
@@ -134,12 +113,6 @@ class PublicCategoryService {
     // 3. GET CATEGORY BY ID (Chi tiết danh mục)
     // ========================================================
     async getCategoryById(id: number) {
-        const cacheKey = `category:public:${id}`;
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            // Cần kiểm tra status trong Controller nếu không muốn trả về từ cache
-            return cached; 
-        }
 
         const category = await prisma.category.findUnique({
             where: { id, status: 'active' }, // Luôn lọc active ở đây
@@ -169,8 +142,6 @@ class PublicCategoryService {
             throw new NotFoundError('Danh mục không tồn tại hoặc không khả dụng');
         }
 
-        await redis.set(cacheKey, category, CATEGORY_CACHE_TTL);
-
         return category;
     }
 
@@ -188,7 +159,7 @@ class PublicCategoryService {
 
     // ========================================================
     // BỎ QUA CÁC HÀM ADMIN/CS: 
-    // createCategory, updateCategory, deleteCategory, checkCategoryCodeExists, checkSlugExists, checkCircularReference, invalidateCache
+    // createCategory, updateCategory, deleteCategory, checkCategoryCodeExists, checkSlugExists, checkCircularReference
     // ========================================================
 }
 

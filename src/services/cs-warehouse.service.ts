@@ -1,12 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import RedisService from './redis.service';
 import type { QueryWarehousesInput } from '@validators/warehouse.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-// Cache trong 1 giờ vì danh sách kho ít thay đổi
-const WAREHOUSE_LIST_CACHE_TTL = 3600; 
 
 class PublicWarehouseService {
 
@@ -27,15 +22,6 @@ class PublicWarehouseService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // 1. Tạo Cache Key riêng cho Public (tránh trùng với Admin)
-    const queryString = JSON.stringify({ page, limit, search, city, region, warehouseType, sortBy, sortOrder });
-    const cacheKey = `public:warehouse:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
     // 2. Xây dựng điều kiện lọc
     const where: Prisma.WarehouseWhereInput = {
@@ -85,9 +71,6 @@ class PublicWarehouseService {
       },
       message: 'Lấy danh sách cửa hàng thành công',
     };
-
-    // 4. Lưu Cache
-    await redis.set(cacheKey, result, WAREHOUSE_LIST_CACHE_TTL);
 
     return result;
   }

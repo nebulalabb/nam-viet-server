@@ -3,22 +3,10 @@ import { AuthRequest } from '@custom-types/common.type';
 import { AuthorizationError } from '@utils/errors';
 import { asyncHandler } from './errorHandler';
 import { PrismaClient } from '@prisma/client';
-import RedisService from '@services/redis.service';
-
-const redisClient = RedisService.getInstance();
 
 const prisma = new PrismaClient();
 
-const PERMISSION_CACHE_TTL = 3600;
-
 const getUserPermissions = async (roleId: number): Promise<string[]> => {
-  const cacheKey = `permissions:role:${roleId}`;
-
-  const cached = await redisClient.get<string[]>(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   const rolePermissions = await prisma.role.findMany({
     where: { id: roleId },
     include: {
@@ -37,8 +25,6 @@ const getUserPermissions = async (roleId: number): Promise<string[]> => {
   const permissions = rolePermissions.flatMap((role) =>
     role.rolePermissions.map((rolePermission) => rolePermission.permission.permissionKey)
   );
-
-  await redisClient.set(cacheKey, permissions, PERMISSION_CACHE_TTL);
 
   return permissions;
 };
@@ -133,13 +119,3 @@ export const checkWarehouseAccess = (warehouseIdParam: string = 'warehouseId') =
   });
 };
 
-export const invalidatePermissionCache = async (roleId?: number) => {
-  if (roleId) {
-    await redisClient.del(`permissions:role:${roleId}`);
-  } else {
-    const keys = await redisClient.keys('permissions:role:*');
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
-  }
-};

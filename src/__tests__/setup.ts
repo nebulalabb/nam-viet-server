@@ -10,8 +10,7 @@ process.env.BCRYPT_ROUNDS = '10';
 
 // Global test setup
 beforeAll(async () => {
-  // Initialize Redis for testing (optional - can be mocked)
-  // await RedisService.getInstance().initialize();
+
 });
 
 // Clean up after all tests
@@ -20,8 +19,7 @@ afterAll(async () => {
   const prisma = new PrismaClient();
   await prisma.$disconnect();
 
-  // Close Redis connection
-  // await RedisService.getInstance().disconnect();
+
 });
 
 // Reset data between tests if needed

@@ -3,20 +3,36 @@ import { CreateTicketInput, UpdateTicketInput, TicketQueryInput } from '../valid
 import { NotFoundError } from '../utils/errors';
 import { Prisma } from '@prisma/client';
 import notificationService from './notification.service';
+import { logActivity } from '@utils/logger';
 
 class TicketService {
-  async create(userId: number, data: CreateTicketInput) {
-    // Generate unique code (Simple logic: TCK-TIMESTAMP)
-    // improved: TCK-YYYYMMDD-XXXX
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await prisma.ticket.count({
+  // Create new ticket
+  async createTicket(userId: number, data: CreateTicketInput) {
+    // Generate unique code (Logic: TCK-YYYYMMDD-XXXX)
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    
+    // Find the last ticket created today to increment sequence
+    const lastTicket = await prisma.ticket.findFirst({
         where: {
-            createdAt: {
-                gte: new Date(new Date().setHours(0,0,0,0))
+            ticketCode: {
+                startsWith: `TCK-${dateStr}`
             }
+        },
+        orderBy: {
+            ticketCode: 'desc'
         }
     });
-    const ticketCode = `TCK-${dateStr}-${(count + 1).toString().padStart(3, '0')}`;
+
+    let sequence = 1;
+    if (lastTicket) {
+        const parts = lastTicket.ticketCode.split('-');
+        if (parts.length === 3) {
+            sequence = parseInt(parts[2]) + 1;
+        }
+    }
+
+    const ticketCode = `TCK-${dateStr}-${sequence.toString().padStart(3, '0')}`;
 
     const ticket = await prisma.ticket.create({
       data: {
@@ -55,14 +71,23 @@ class TicketService {
         }).catch(console.error);
     }
 
+    // Log activity
+    logActivity('create', userId, 'tickets', {
+      recordId: ticket.id,
+      newValue: ticket,
+    });
+
     return ticket;
   }
 
-  async findAll(query: TicketQueryInput) {
+  // Get all tickets with pagination
+  async getAllTickets(query: TicketQueryInput) {
     const { page = 1, limit = 10, search, status, priority, customerId, assignedToId, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.TicketWhereInput = {};
+    const where: Prisma.TicketWhereInput = {
+        deletedAt: null, // Only fetch active tickets
+    };
 
     if (search) {
       where.OR = [
@@ -106,16 +131,17 @@ class TicketService {
 
     return {
       tickets,
-      pagination: {
-        total,
+      meta: {
         page,
         limit,
+        total,
         totalPages: Math.ceil(total / limit),
       },
     };
   }
 
-  async findOne(id: number) {
+  // Get ticket by ID
+  async getTicketById(id: number) {
     const ticket = await prisma.ticket.findUnique({
       where: { id },
       include: {
@@ -126,15 +152,16 @@ class TicketService {
       },
     });
 
-    if (!ticket) {
+    if (!ticket || ticket.deletedAt) {
       throw new NotFoundError('Phiếu hỗ trợ không tồn tại');
     }
 
     return ticket;
   }
 
-  async update(id: number, data: UpdateTicketInput) {
-    const oldTicket = await this.findOne(id);
+  // Update ticket
+  async updateTicket(id: number, data: UpdateTicketInput, updatedBy?: number) {
+    const oldTicket = await this.getTicketById(id);
 
     const updatedTicket = await prisma.ticket.update({
       where: { id },
@@ -171,14 +198,37 @@ class TicketService {
         }).catch(console.error);
     }
 
+    // Log activity
+    if (updatedBy) {
+        logActivity('update', updatedBy, 'tickets', {
+            recordId: id,
+            oldValue: oldTicket,
+            newValue: updatedTicket,
+        });
+    }
+
     return updatedTicket;
   }
 
-  async delete(id: number) {
-    await this.findOne(id);
-    return await prisma.ticket.delete({
+  // Delete ticket (Soft Delete)
+  async deleteTicket(id: number, deletedBy?: number) {
+    const ticket = await this.getTicketById(id);
+    
+    // Soft delete
+    await prisma.ticket.update({
       where: { id },
+      data: { deletedAt: new Date() }
     });
+
+    // Log activity
+    if (deletedBy) {
+        logActivity('delete', deletedBy, 'tickets', {
+            recordId: id,
+            oldValue: ticket,
+        });
+    }
+    
+    return { message: 'Xóa phiếu hỗ trợ thành công' };
   }
 }
 

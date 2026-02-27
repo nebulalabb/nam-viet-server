@@ -131,7 +131,7 @@ class CustomerAuthController {
             const accessToken = req.headers.authorization?.substring(7) || ''; 
 
             if (userId) {
-                // Gọi Service để xóa session Redis
+                // Gọi Service để xóa session
                 await customerAuthService.logout(userId, accessToken);
             }
 

@@ -3,9 +3,11 @@ import { CreateTaskInput, UpdateTaskInput, TaskQueryInput } from '../validators/
 import { NotFoundError } from '../utils/errors';
 import { Prisma } from '@prisma/client';
 import notificationService from './notification.service';
+import { logActivity } from '@utils/logger';
 
 class TaskService {
-  async create(userId: number, data: CreateTaskInput) {
+  // Create new task
+  async createTask(userId: number, data: CreateTaskInput) {
     const task = await prisma.crmTask.create({
       data: {
         title: data.title,
@@ -36,14 +38,23 @@ class TaskService {
         }).catch(console.error);
     }
 
+    // Log activity
+    logActivity('create', userId, 'tasks', {
+      recordId: task.id,
+      newValue: task,
+    });
+
     return task;
   }
 
-  async findAll(query: TaskQueryInput) {
+  // Get all tasks with pagination
+  async getAllTasks(query: TaskQueryInput) {
     const { page = 1, limit = 10, search, status, priority, type, customerId, assignedToId, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.CrmTaskWhereInput = {};
+    const where: Prisma.CrmTaskWhereInput = {
+      deletedAt: null, // Only fetch active tasks
+    };
 
     if (search) {
       where.OR = [
@@ -91,16 +102,17 @@ class TaskService {
 
     return {
       tasks,
-      pagination: {
-        total,
+      meta: {
         page,
         limit,
+        total,
         totalPages: Math.ceil(total / limit),
       },
     };
   }
 
-  async findOne(id: number) {
+  // Get task by ID
+  async getTaskById(id: number) {
     const task = await prisma.crmTask.findUnique({
       where: { id },
       include: {
@@ -111,15 +123,16 @@ class TaskService {
       },
     });
 
-    if (!task) {
+    if (!task || task.deletedAt) {
       throw new NotFoundError('Nhiệm vụ không tồn tại');
     }
 
     return task;
   }
 
-  async update(id: number, data: UpdateTaskInput) {
-    const oldTask = await this.findOne(id);
+  // Update task
+  async updateTask(id: number, data: UpdateTaskInput, updatedBy?: number) {
+    const oldTask = await this.getTaskById(id);
 
     const updatedTask = await prisma.crmTask.update({
       where: { id },
@@ -145,14 +158,37 @@ class TaskService {
         }).catch(console.error);
     }
 
+    // Log activity
+    if (updatedBy) {
+        logActivity('update', updatedBy, 'tasks', {
+            recordId: id,
+            oldValue: oldTask,
+            newValue: updatedTask,
+        });
+    }
+
     return updatedTask;
   }
 
-  async delete(id: number) {
-    await this.findOne(id);
-    return await prisma.crmTask.delete({
+  // Delete task (Soft Delete)
+  async deleteTask(id: number, deletedBy?: number) {
+    const task = await this.getTaskById(id);
+    
+    // Soft delete
+    await prisma.crmTask.update({
       where: { id },
+      data: { deletedAt: new Date() }
     });
+
+    // Log activity
+    if (deletedBy) {
+        logActivity('delete', deletedBy, 'tasks', {
+            recordId: id,
+            oldValue: task,
+        });
+    }
+
+    return { message: 'Xóa nhiệm vụ thành công' };
   }
 }
 

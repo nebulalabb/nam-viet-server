@@ -8,14 +8,8 @@ import {
   ApplyPromotionInput,
   PromotionQueryInput,
 } from '@validators/promotion.validator';
-import RedisService from './redis.service';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PROMOTION_CACHE_TTL = 3600;
-const PROMOTION_LIST_CACHE_TTL = 600;
 
 class PromotionService {
   async getAll(query: PromotionQueryInput) {
@@ -38,16 +32,7 @@ class PromotionService {
     const limitNum = Number(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // Cache key
-    const cacheKey = `promotion:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
+    console.log(`❌ Truy vấn từ database...`);
 
     const where: Prisma.PromotionWhereInput = {
       deletedAt: null,
@@ -174,23 +159,12 @@ class PromotionService {
       statistics,
     };
 
-    await redis.set(cacheKey, result, PROMOTION_LIST_CACHE_TTL);
-
     return result;
   }
 
   // Get promotion by ID
   async getById(id: number) {
-    const cacheKey = `promotion:${id}`;
 
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`⚠️ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const promotion = await prisma.promotion.findUnique({
       where: { id },
@@ -243,8 +217,6 @@ class PromotionService {
     if (!promotion) {
       throw new NotFoundError('Khuyến mãi');
     }
-
-    await redis.set(cacheKey, promotion, PROMOTION_CACHE_TTL);
 
     return promotion;
   }
@@ -318,8 +290,6 @@ class PromotionService {
         code: promotion.promotionCode,
       });
 
-      await redis.flushPattern('promotion:list:*');
-
       return promotion;
     }
     else {
@@ -375,8 +345,6 @@ class PromotionService {
         id: promotion.id,
         code: promotion.promotionCode,
       });
-
-      await redis.flushPattern('promotion:list:*');
 
       return promotion;
     }
@@ -477,9 +445,6 @@ class PromotionService {
     // Log activity
     logActivity('update', userId, 'promotions', { id, changes: Object.keys(updateData) });
 
-    await redis.flushPattern('promotion:list:*');
-    await redis.del(`promotion:${promotion.id}`);
-
     return promotion;
   }
 
@@ -519,9 +484,6 @@ class PromotionService {
     // Log activity
     logActivity('approve', userId, 'promotions', { id, code: updated.promotionCode });
 
-    await redis.flushPattern('promotion:list:*');
-    await redis.del(`promotion:${promotion.id}`);
-
     return updated;
   }
 
@@ -557,9 +519,6 @@ class PromotionService {
     // Log activity
     logActivity('cancel', userId, 'promotions', { id, reason, code: updated.promotionCode });
 
-    await redis.flushPattern('promotion:list:*');
-    await redis.del(`promotion:${promotion.id}`);
-
     return updated;
   }
 
@@ -590,9 +549,6 @@ class PromotionService {
 
     // Log activity
     logActivity('delete', userId, 'promotions', { id, code: updated.promotionCode });
-
-    await redis.flushPattern('promotion:list:*');
-    await redis.del(`promotion:${promotion.id}`);
 
     return updated;
   }
@@ -922,8 +878,6 @@ class PromotionService {
       },
     });
 
-    await redis.flushPattern('promotion:list:*');
-
     return expired.count;
   }
 
@@ -936,21 +890,10 @@ class PromotionService {
       },
     });
 
-    await redis.flushPattern('promotion:list:*');
-
     return promotion;
   }
   // Promotion statistics (for dashboard)
   async getStatistics() {
-    const cacheKey = 'promotion:statistics';
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const promotions = await prisma.promotion.findMany({
       where: { deletedAt: null },
@@ -981,8 +924,6 @@ class PromotionService {
       ).length,
       totalUsage: promotions.reduce((sum, p) => sum + p.usageCount, 0),
     };
-
-    await redis.set(cacheKey, statistics, 300); // cache 5 phút
 
     return statistics;
   }

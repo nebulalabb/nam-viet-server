@@ -1,13 +1,14 @@
 import { PrismaClient, AuthProvider, CustomerType } from '@prisma/client';
 import { AuthenticationError, AuthorizationError, NotFoundError, BadRequestError } from '@utils/errors';
-import CustomerRedisService from './cs-redis.service';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@utils/cs-jwt';
 import customerService from './cs-customer.service';
 import axios from 'axios';
 import qs from 'qs';
 
 const prisma = new PrismaClient();
-const csRedis = CustomerRedisService.getInstance();
+
+// Local Memory Maps for Token Blacklisting
+const tokenBlacklist = new Set<string>();
 
 const normalizePhone = (phone: string): string => {
     if (!phone) return '';
@@ -26,11 +27,15 @@ class CustomerAuthService {
         const accessToken = generateAccessToken(payload);
         const refreshToken = generateRefreshToken(payload);
 
-        await csRedis.setSessionRefreshToken(account.id, refreshToken);
+
+        // JWT handles validity
 
         await prisma.customerAccount.update({
             where: { id: account.id },
-            data: { lastLogin: new Date() }
+            data: { 
+                lastLogin: new Date(),
+                refreshToken: refreshToken // Optionally save to DB if needed
+            }
         });
 
         return { accessToken, refreshToken };
@@ -172,10 +177,13 @@ class CustomerAuthService {
             throw new AuthenticationError('Account not found or inactive');
         }
 
-        const storedToken = await csRedis.getSessionRefreshToken(account.id);
-
-        if (!storedToken || storedToken !== refreshTokenInput) {
-            await csRedis.clearSession(account.id);
+        // We check the DB for the refresh token
+        if (account.refreshToken !== refreshTokenInput) {
+            // Overwrite in DB to invalidate
+            await prisma.customerAccount.update({
+                where: { id: account.id },
+                data: { refreshToken: null }
+            });
             throw new AuthenticationError('Phiên đăng nhập không hợp lệ hoặc đã hết hạn');
         }
 
@@ -190,9 +198,12 @@ class CustomerAuthService {
         const account = await prisma.customerAccount.findUnique({ where: { customerId } });
         
         if (account) {
-            await csRedis.clearSession(account.id);
+            await prisma.customerAccount.update({
+                where: { id: account.id },
+                data: { refreshToken: null }
+            });
         }
-        await csRedis.blacklistToken(accessToken);
+        tokenBlacklist.add(accessToken);
         return { message: 'Đăng xuất thành công' };
     }
 
@@ -214,11 +225,6 @@ class CustomerAuthService {
     // 6. GET ACCOUNT
     // =================================================================
     async getAccountByCustomerId(customerId: number) {
-        const cacheKey = `c_cache:account:${customerId}`; 
-        
-        const cached = await csRedis.get(cacheKey);
-        if (cached) return cached;
-
         const account = await prisma.customerAccount.findUnique({
             where: { customerId },
             include: { customer: true }
@@ -226,9 +232,9 @@ class CustomerAuthService {
 
         if (!account) throw new NotFoundError('Tài khoản không tồn tại');
 
-        await csRedis.set(cacheKey, account, 3600); 
         return account;
     }
 }
 
+export { tokenBlacklist as customerTokenBlacklist };
 export default new CustomerAuthService();

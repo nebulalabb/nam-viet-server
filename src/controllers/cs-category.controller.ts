@@ -45,7 +45,7 @@ class PublicCategoryController {
         const category = await categoryService.getCategoryById(id);
 
         // Thêm kiểm tra: Khách hàng chỉ nên thấy danh mục đang active
-        if (category.status !== 'active') {
+        if (!category || category.status !== 'active') {
             throw new NotFoundError('Danh mục không tồn tại hoặc không khả dụng');
         }
 

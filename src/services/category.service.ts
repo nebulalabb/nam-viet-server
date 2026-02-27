@@ -1,19 +1,13 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
 import type {
   CreateCategoryInput,
   UpdateCategoryInput,
   QueryCategoriesInput,
 } from '@validators/category.validator';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CATEGORY_CACHE_TTL = 3600;
-const CATEGORY_LIST_CACHE_TTL = 600;
 
 class CategoryService {
   async getAllCategories(query: QueryCategoriesInput) {
@@ -30,18 +24,6 @@ class CategoryService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const cacheKey = `category:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.CategoryWhereInput = {
       ...(search && {
@@ -106,21 +88,12 @@ class CategoryService {
       message: 'Lấy danh sách danh mục thành công',
     };
 
-    await redis.set(cacheKey, result, CATEGORY_LIST_CACHE_TTL);
+    return result;
 
     return result;
   }
 
   async getCategoryTree() {
-    const cacheKey = 'category:tree';
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const categories = await prisma.category.findMany({
       where: { status: 'active' },
@@ -142,7 +115,7 @@ class CategoryService {
 
     const tree = this.buildTree(categories, null);
 
-    await redis.set(cacheKey, tree, CATEGORY_CACHE_TTL);
+    return tree;
 
     return tree;
   }
@@ -157,15 +130,6 @@ class CategoryService {
   }
 
   async getCategoryById(id: number) {
-    const cacheKey = `category:${id}`;
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const category = await prisma.category.findUnique({
       where: { id },
@@ -214,7 +178,7 @@ class CategoryService {
       throw new NotFoundError('Danh mục không tồn tại');
     }
 
-    await redis.set(cacheKey, category, CATEGORY_CACHE_TTL);
+    return category;
 
     return category;
   }
@@ -272,7 +236,7 @@ class CategoryService {
       newValue: category,
     });
 
-    await this.invalidateCache();
+    return category;
 
     return category;
   }
@@ -355,8 +319,7 @@ class CategoryService {
       newValue: updatedCategory,
     });
 
-    await redis.del(`category:${id}`);
-    await this.invalidateCache();
+    return updatedCategory;
 
     return updatedCategory;
   }
@@ -399,8 +362,7 @@ class CategoryService {
       oldValue: category,
     });
 
-    await redis.del(`category:${id}`);
-    await this.invalidateCache();
+    return { message: 'Xóa danh mục thành công' };
 
     return { message: 'Xóa danh mục thành công' };
   }
@@ -446,22 +408,9 @@ class CategoryService {
     return false;
   }
 
-  private async invalidateCache() {
-    await redis.flushPattern('category:list:*');
-    await redis.del('category:tree');
-  }
+
 
   async getCategoryStats() {
-    const cacheKey = 'category:stats';
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     // Get all categories with stats
     const categories = await prisma.category.findMany({
@@ -506,7 +455,7 @@ class CategoryService {
       topCategories,
     };
 
-    await redis.set(cacheKey, stats, CATEGORY_CACHE_TTL);
+    return stats;
 
     return stats;
   }

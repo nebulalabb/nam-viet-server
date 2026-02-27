@@ -137,27 +137,6 @@ class PaymentReceiptController {
     });
   }
 
-  // POST /api/payment-receipts/refresh - Refresh cache
-  async refreshCache(_req: any, res: Response) {
-    try {
-      const result = await paymentReceiptService.refreshCache();
-
-      res.status(200).json({
-        success: true,
-        data: result,
-        message: "Làm mới cache thành công",
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: any) {
-      res.status(500).json({
-        success: false,
-        error: {
-          message: error?.message || "Làm mới cache thất bại",
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
 }
 
 export default new PaymentReceiptController();

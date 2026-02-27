@@ -1,11 +1,9 @@
 import { PrismaClient, NotificationType, NotificationPriority, NotificationChannel, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@utils/errors';
-import RedisService, { CachePrefix } from './redis.service';
 import { logActivity } from '@utils/logger';
 import emailService from './email.service';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
 
 interface CreateNotificationInput {
   userId: number;
@@ -76,9 +74,6 @@ class NotificationService {
       await this.sendEmailNotification(notification);
     }
 
-    // Invalidate cache
-    await redis.del(`${CachePrefix.USER}notifications:${data.userId}`);
-
     logActivity('create', data.userId, 'notification', { notificationId: notification.id });
 
     return notification;
@@ -102,11 +97,6 @@ class NotificationService {
           },
         })
       )
-    );
-
-    // Clear cache for all affected users
-    await Promise.all(
-      data.userIds.map((userId) => redis.del(`${CachePrefix.USER}notifications:${userId}`))
     );
 
     // Send emails if needed
@@ -201,15 +191,7 @@ class NotificationService {
     };
   }
 
-  // Get unread notifications count
   async getUnreadCount(userId: number): Promise<number> {
-    const cacheKey = `${CachePrefix.USER}unread_count:${userId}`;
-    const cached = await redis.get<number>(cacheKey);
-
-    if (cached !== null) {
-      return cached;
-    }
-
     const count = await prisma.notification.count({
       where: {
         userId,
@@ -217,8 +199,6 @@ class NotificationService {
         deletedAt: null,
       },
     });
-
-    await redis.set(cacheKey, count, 300); // Cache for 5 minutes
 
     return count;
   }
@@ -269,10 +249,6 @@ class NotificationService {
       },
     });
 
-    // Clear cache
-    await redis.del(`${CachePrefix.USER}notifications:${userId}`);
-    await redis.del(`${CachePrefix.USER}unread_count:${userId}`);
-
     return updated;
   }
 
@@ -289,10 +265,6 @@ class NotificationService {
         readAt: new Date(),
       },
     });
-
-    // Clear cache
-    await redis.del(`${CachePrefix.USER}notifications:${userId}`);
-    await redis.del(`${CachePrefix.USER}unread_count:${userId}`);
 
     return { success: true, message: 'All notifications marked as read' };
   }
@@ -312,10 +284,6 @@ class NotificationService {
       },
     });
 
-    // Clear cache
-    await redis.del(`${CachePrefix.USER}notifications:${userId}`);
-    await redis.del(`${CachePrefix.USER}unread_count:${userId}`);
-
     return { success: true, message: 'Notification deleted successfully' };
   }
 
@@ -331,9 +299,6 @@ class NotificationService {
         deletedAt: new Date(),
       },
     });
-
-    // Clear cache
-    await redis.del(`${CachePrefix.USER}notifications:${userId}`);
 
     return { success: true, message: 'All read notifications deleted' };
   }

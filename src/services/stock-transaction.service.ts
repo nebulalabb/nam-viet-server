@@ -6,12 +6,7 @@ import {
   type CreateImportInput,
   type TransactionQueryInput,
 } from '@validators/stock-transaction.validator';
-import RedisService from './redis.service';
-
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const STOCK_TRANSACTION_CACHE_TTL = parseInt(process.env.STOCK_TRANSACTION_CACHE_TTL || '300');
 
 class StockTransactionService {
   private async generateTransactionCode(type: string): Promise<string> {
@@ -58,18 +53,6 @@ class StockTransactionService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `stock-transaction:list:${queryString}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.StockTransactionWhereInput = {
       ...(search && {
@@ -154,23 +137,10 @@ class StockTransactionService {
       message: 'Success',
     };
 
-    await redis.set(cacheKey, result, STOCK_TRANSACTION_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `stock-transaction:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
-
     const transaction = await prisma.stockTransaction.findUnique({
       where: { id },
       include: {
@@ -224,8 +194,6 @@ class StockTransactionService {
     if (!transaction) {
       throw new NotFoundError('Stock transaction');
     }
-
-    await redis.set(cacheKey, transaction, STOCK_TRANSACTION_CACHE_TTL);
 
     return transaction;
   }
@@ -294,9 +262,6 @@ class StockTransactionService {
       recordId: transaction.id,
       newValue: transaction,
     });
-
-    // Invalidate cache
-    await redis.flushPattern('stock-transaction:list:*');
 
     return transaction;
   }
@@ -666,9 +631,6 @@ class StockTransactionService {
       oldValue: { status: transaction.status },
       newValue: { status: 'approved' },
     });
-
-    await redis.flushPattern('stock-transaction:list:*');
-    await redis.del(`stock-transaction:${id}`);
 
     return result;
   }
@@ -1102,8 +1064,6 @@ class StockTransactionService {
         inventory: updatedInventory,
       };
     });
-
-    await redis.flushPattern('stock-transaction:list:*');
 
     return result;
   }

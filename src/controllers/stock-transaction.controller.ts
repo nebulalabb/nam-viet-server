@@ -11,7 +11,11 @@ class StockTransactionController {
     const response: ApiResponse = {
       success: true,
       data: result.data,
-      meta: result.meta,
+      meta: {
+        ...result.meta,
+        page: Number(result.meta.page),
+        limit: Number(result.meta.limit),
+      },
       message: result.message,
       timestamp: new Date().toISOString(),
     };

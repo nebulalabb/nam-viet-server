@@ -1,62 +1,74 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RateLimitError } from '@utils/errors';
 import { Request, Response } from 'express';
-import RedisService from '@services/redis.service';
 import { AuthRequest } from '@custom-types/common.type';
 
-const redisClient = RedisService.getInstance();
-
-class RedisStore {
+class MemoryStore {
   prefix: string;
   windowMs: number;
+  private store = new Map<string, { hits: number; resetTime: number }>();
 
   constructor(windowMs: number, prefix: string = 'rate-limit') {
     this.prefix = prefix;
     this.windowMs = windowMs;
+
+    // Periodic cleanup of expired entries
+    setInterval(() => this.cleanup(), 60000);
+  }
+
+  private cleanup() {
+    const now = Date.now();
+    for (const [key, data] of this.store.entries()) {
+      if (now > data.resetTime) {
+        this.store.delete(key);
+      }
+    }
   }
 
   async increment(key: string): Promise<{ totalHits: number; resetTime?: Date }> {
-    const redisKey = `${this.prefix}:${key}`;
-    const ttl = Math.ceil(this.windowMs / 1000);
-
-    const hits = await redisClient.incr(redisKey);
-
-    if (hits === 1) {
-      await redisClient.expire(redisKey, ttl);
+    const fullKey = `${this.prefix}:${key}`;
+    const now = Date.now();
+    
+    let data = this.store.get(fullKey);
+    if (!data || now > data.resetTime) {
+      data = { hits: 1, resetTime: now + this.windowMs };
+    } else {
+      data.hits += 1;
     }
-
-    const remainingTtl = await redisClient.ttl(redisKey);
-    const resetTime = new Date(Date.now() + remainingTtl * 1000);
+    
+    this.store.set(fullKey, data);
 
     return {
-      totalHits: hits,
-      resetTime,
+      totalHits: data.hits,
+      resetTime: new Date(data.resetTime),
     };
   }
 
   async decrement(key: string): Promise<void> {
-    const redisKey = `${this.prefix}:${key}`;
-    await redisClient.decr(redisKey);
+    const fullKey = `${this.prefix}:${key}`;
+    const data = this.store.get(fullKey);
+    if (data && data.hits > 0) {
+      data.hits -= 1;
+      this.store.set(fullKey, data);
+    }
   }
 
   async resetKey(key: string): Promise<void> {
-    const redisKey = `${this.prefix}:${key}`;
-    await redisClient.del(redisKey);
+    const fullKey = `${this.prefix}:${key}`;
+    this.store.delete(fullKey);
   }
 }
 
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 10000,
   message: 'Quá nhiều yêu cầu từ IP này, vui lòng thử lại sau',
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req: Request, _res: Response) => {
     throw new RateLimitError('Quá nhiều yêu cầu, vui lòng chậm lại');
   },
-  skip: (req) => {
-    return req.path === '/health' || req.path === '/api/health';
-  },
+  skip: () => true,
 });
 
 export const loginRateLimiter = rateLimit({
@@ -120,13 +132,13 @@ export const createRateLimiter = (options: {
   });
 };
 
-export const createRedisRateLimiter = (options: {
+export const createMemoryRateLimiter = (options: {
   windowMs: number;
   max: number;
   prefix?: string;
   keyGenerator?: (req: Request) => string;
 }) => {
-  const store = new RedisStore(options.windowMs, options.prefix);
+  const store = new MemoryStore(options.windowMs, options.prefix);
 
   return async (req: AuthRequest, res: Response, next: Function) => {
     const key = options.keyGenerator

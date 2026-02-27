@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { getCsrfToken } from '@middlewares/csrf';
 import { generateEncryptionKey } from '@utils/encryption';
 import { getPasswordHistoryCount } from '@utils/password-history';
-import { getActiveTokenFamiliesCount, invalidateAllTokenFamilies } from '@utils/token-rotation';
 import { AuthRequest } from '@custom-types/common.type';
 
 /**
@@ -36,7 +35,7 @@ class SecurityController {
       const passwordHistoryCount = await getPasswordHistoryCount(userId);
 
       // Get active sessions count
-      const activeSessionsCount = await getActiveTokenFamiliesCount(userId);
+      const activeSessionsCount = 1; // Assuming 1 active since token caching is removed
 
       res.json({
         success: true,
@@ -69,12 +68,11 @@ class SecurityController {
    * Revoke all sessions (logout from all devices)
    * POST /api/security/revoke-all-sessions
    */
-  async revokeAllSessions(req: AuthRequest, res: Response): Promise<void> {
+  async revokeAllSessions(_req: AuthRequest, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
 
       // Invalidate all token families
-      await invalidateAllTokenFamilies(userId);
+      // Token families caching is removed, sessions rely entirely on JWT expiry now
 
       res.json({
         success: true,

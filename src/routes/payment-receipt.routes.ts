@@ -91,13 +91,6 @@ router.post(
   asyncHandler(paymentReceiptController.sendEmail.bind(paymentReceiptController))
 );
 
-// POST /api/payment-receipts/refresh - Refresh cache
-router.post(
-  '/refresh',
-  authorize('view_payment_receipts'),
-  asyncHandler(paymentReceiptController.refreshCache.bind(paymentReceiptController))
-);
-
 // DELETE /api/payment-receipts/:id - Delete payment receipt
 router.delete(
   '/:id',

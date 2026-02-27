@@ -113,13 +113,6 @@ router.post(
   asyncHandler(paymentVoucherController.bulkPost.bind(paymentVoucherController))
 );
 
-// POST /api/payment-vouchers/refresh - Refresh cache
-router.post(
-  '/refresh',
-  authorize('view_payment_vouchers'),
-  asyncHandler(paymentVoucherController.refreshCache.bind(paymentVoucherController))
-);
-
 // DELETE /api/payment-vouchers/:id - Delete payment voucher
 router.delete(
   '/:id',

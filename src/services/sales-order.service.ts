@@ -11,14 +11,8 @@ import {
   ProcessPaymentInput,
   SalesOrderQueryInput,
 } from '@validators/sales-order.validator';
-import { sortedQuery } from '@utils/redis';
-import RedisService from './redis.service';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const SALES_ORDER_CACHE_TTL = 3600;
-const SALES_ORDER_LIST_CACHE_TTL = 600;
 
 class SalesOrderService {
   private async generateOrderCode(): Promise<string> {
@@ -81,19 +75,6 @@ class SalesOrderService {
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const offset = (pageNum - 1) * limitNum;
-
-    // Cache key - use normalized query
-    const cacheQuery = { ...query, orderStatus: normalizedOrderStatus };
-    delete (cacheQuery as any)['orderStatus[]'];
-    const cacheKey = `sales-order:list:${JSON.stringify(sortedQuery(cacheQuery))}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     // Normalize orderStatus - can be single value or array
     const normalizeOrderStatusFilter = (status: any): any => {
@@ -238,22 +219,10 @@ class SalesOrderService {
       statistics,
     };
 
-    await redis.set(cacheKey, result, SALES_ORDER_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `sales-order:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`⚠️ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const order = await prisma.salesOrder.findUnique({
       where: { id },
@@ -341,8 +310,6 @@ class SalesOrderService {
       ...order,
       remainingAmount: Number(order.totalAmount) - Number(order.paidAmount),
     };
-
-    await redis.set(cacheKey, result, SALES_ORDER_CACHE_TTL);
 
     return result;
   }
@@ -532,6 +499,7 @@ class SalesOrderService {
           paymentMethod: data.paymentMethod,
           paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
           orderStatus: 'completed',
+          completedAt: data.orderDate ? new Date(data.orderDate) : new Date(),
           deliveryAddress: null,
           notes: data.notes,
           createdBy: userId,
@@ -656,8 +624,6 @@ class SalesOrderService {
       recordId: result.id,
       orderCode: result.orderCode,
     });
-
-    await redis.flushPattern('sales-order:list:*');
 
     return result;
   }
@@ -810,8 +776,6 @@ class SalesOrderService {
       orderCode: result.orderCode,
     });
 
-    await redis.flushPattern('sales-order:list:*');
-
     return {
       order: result,
       inventoryShortages: inventoryShortages.length > 0 ? inventoryShortages : undefined,
@@ -857,9 +821,6 @@ class SalesOrderService {
       changes: data,
     });
 
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
-
     return updatedOrder;
   }
 
@@ -902,9 +863,6 @@ class SalesOrderService {
       action: 'approve_order',
       orderCode: order.orderCode,
     });
-
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
 
     return updatedOrder;
   }
@@ -1032,9 +990,6 @@ class SalesOrderService {
       orderCode: order.orderCode,
     });
 
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
-
     return result;
   }
 
@@ -1121,9 +1076,6 @@ class SalesOrderService {
       action: 'complete_order',
       orderCode: order.orderCode,
     });
-
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
 
     return result;
   }
@@ -1220,9 +1172,6 @@ class SalesOrderService {
       orderCode: order.orderCode,
       reason: data.reason,
     });
-
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
 
     return result;
   }
@@ -1344,9 +1293,6 @@ class SalesOrderService {
       paidAmount: data.paidAmount,
     });
 
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
-
     return result;
   }
 
@@ -1400,19 +1346,9 @@ class SalesOrderService {
       orderCode: order.orderCode,
     });
 
-    await redis.flushPattern('sales-order:list:*');
-    await redis.del(`sales-order:${id}`);
-
     return { message: 'Xóa đơn hàng bán thành công' };
   }
 
-  async refresh() {
-    // Clear all sales order cache
-    await redis.flushPattern('sales-order:list:*');
-    await redis.flushPattern('sales-order:*');
-
-    return { message: 'Làm mới dữ liệu thành công' };
-  }
 }
 
 export default new SalesOrderService();
