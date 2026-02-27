@@ -1,6 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService, { CachePrefix } from './redis.service';
 import { logActivity } from '@utils/logger';
 import uploadService from './upload.service';
 import {
@@ -12,10 +11,6 @@ import path from 'path';
 import { serializeBigInt } from '@utils/serializer';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PRODUCT_CACHE_TTL = 3600;
-const PRODUCT_LIST_CACHE_TTL = 300;
 
 class ProductService {
   private async generateSKU(productType: string): Promise<string> {
@@ -65,17 +60,6 @@ class ProductService {
     console.log('productType', productType);
 
     const offset = (page - 1) * limit;
-
-    const queryString = Object.keys(params).length > 0 ? JSON.stringify(params) : 'default';
-    const cacheKey = `product:${productType}:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached; // Redis already parses JSON
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.ProductWhereInput = {
       deletedAt: null,
@@ -166,17 +150,10 @@ class ProductService {
       },
     };
 
-    await redis.set(cacheKey, result, PRODUCT_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `${CachePrefix.PRODUCT}${id}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
     const product = await prisma.product.findUnique({
       where: { id },
@@ -241,8 +218,6 @@ class ProductService {
       ...product,
       videos: product.videos?.map((video) => serializeBigInt(video)),
     };
-
-    await redis.set(cacheKey, serializedProduct, PRODUCT_CACHE_TTL);
 
     return serializedProduct;
   }
@@ -328,8 +303,6 @@ class ProductService {
       newValue: product,
     });
 
-    await redis.flushPattern('product:*');
-
     return product;
   }
 
@@ -409,8 +382,6 @@ class ProductService {
       newValue: product,
     });
 
-    await redis.flushPattern('product:*');
-
     return product;
   }
 
@@ -430,7 +401,7 @@ class ProductService {
     if (action === 'reset_all') {
       // CASE 3: Tắt TẤT CẢ sản phẩm đang là banner -> về thường
 
-      // (Optional) Tìm các ID đang là featured để invalidate cache sau này
+      // (Optional) Tìm các ID đang là featured
       const currentFeatured = await prisma.product.findMany({
         where: { isFeatured: true },
         select: { id: true },
@@ -486,13 +457,6 @@ class ProductService {
       targetIds: affectedIds,
       description: `Banner status updated: ${action}`,
     });
-
-    // 3. Xóa Cache (Invalidate Cache)
-    // Vì update nhiều sản phẩm, ta cần xóa cache của tất cả sản phẩm bị ảnh hưởng
-    if (affectedIds.length > 0) {
-      // Dùng Promise.all để xóa cache song song cho nhanh
-      await Promise.all(affectedIds.map((id) => redis.del(`product:${id}`)));
-    }
 
     // Trả về kết quả tóm tắt
     return {
@@ -564,8 +528,6 @@ class ProductService {
       recordId: id,
       oldValue: product,
     });
-
-    await redis.flushPattern('product:*');
 
     return { message: 'Product deleted successfully' };
   }
@@ -694,8 +656,6 @@ class ProductService {
       newValue: uploadedImages,
     });
 
-    await redis.flushPattern('product:*');
-
     return uploadedImages;
   }
 
@@ -771,8 +731,6 @@ class ProductService {
       oldValue: image,
     });
 
-    await redis.flushPattern('product:*');
-
     return { message: 'Image deleted successfully' };
   }
 
@@ -816,8 +774,6 @@ class ProductService {
       action: 'set_primary_image',
       newValue: { imageId },
     });
-
-    await redis.flushPattern('product:*');
 
     return updatedImage;
   }
@@ -948,8 +904,6 @@ class ProductService {
       newValue: serializedVideos,
     });
 
-    await redis.flushPattern('product:*');
-
     return serializedVideos;
   }
 
@@ -988,8 +942,6 @@ class ProductService {
       action: 'delete_video',
       oldValue: video,
     });
-
-    await redis.flushPattern('product:*');
 
     return { message: 'Video deleted successfully' };
   }
@@ -1039,18 +991,11 @@ class ProductService {
       newValue: { videoId },
     });
 
-    await redis.flushPattern('product:*');
-
     // Convert BigInt to String for JSON serialization
     return serializeBigInt(updatedVideo);
   }
 
   async getStats() {
-    const cacheKey = 'product:stats';
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
     // Get all products with counts
     const products = await prisma.product.findMany({
@@ -1097,17 +1042,10 @@ class ProductService {
       },
     };
 
-    await redis.set(cacheKey, stats, PRODUCT_CACHE_TTL);
-
     return stats;
   }
 
   async getRawMaterialStats() {
-    const cacheKey = 'product:stats:raw-materials';
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
     // Get all raw materials with inventory info
     const rawMaterials = await prisma.product.findMany({
@@ -1165,19 +1103,10 @@ class ProductService {
       totalInventoryValue,
     };
 
-    await redis.set(cacheKey, stats, PRODUCT_CACHE_TTL);
-
     return stats;
   }
 
   async getPackagingStats() {
-    const cacheKey = 'product:stats:packaging';
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache ${cacheKey}`);
-      return cached;
-    }
-    console.log(`❌ Không có cache ${cacheKey}, truy vấn database...`);
 
     // Get all packaging with inventory info
     const packaging = await prisma.product.findMany({
@@ -1235,19 +1164,10 @@ class ProductService {
       totalInventoryValue,
     };
 
-    await redis.set(cacheKey, stats, PRODUCT_CACHE_TTL);
-
     return stats;
   }
 
   async getGoodsStats() {
-    const cacheKey = 'product:stats:goods';
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache ${cacheKey}`);
-      return cached;
-    }
-    console.log(`❌ Không có cache ${cacheKey}, truy vấn database...`);
 
     // Get all goods with inventory info
     const goods = await prisma.product.findMany({
@@ -1304,8 +1224,6 @@ class ProductService {
       discontinuedCount,
       totalInventoryValue,
     };
-
-    await redis.set(cacheKey, stats, PRODUCT_CACHE_TTL);
 
     return stats;
   }

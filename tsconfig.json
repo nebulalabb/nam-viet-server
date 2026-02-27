@@ -1,34 +1,50 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "lib": ["ES2020"],
-
+    "lib": [
+      "ES2020"
+    ],
     // Modules
     "module": "node16",
     "rootDir": "./src",
     "moduleResolution": "node16",
     "paths": {
-        "@config/*": ["./src/config/*"],
-        "@middlewares/*": ["./src/middlewares/*"],
-        "@routes/*": ["./src/routes/*"],
-        "@controllers/*": ["./src/controllers/*"],
-        "@services/*": ["./src/services/*"],
-        "@utils/*": ["./src/utils/*"],
-        "@custom-types/*": ["./src/types/*"],
-        "@validators/*": ["./src/validators/*"],
-        "@schedulers/*": ["./src/schedulers/*"]
+      "@config/*": [
+        "./src/config/*"
+      ],
+      "@middlewares/*": [
+        "./src/middlewares/*"
+      ],
+      "@routes/*": [
+        "./src/routes/*"
+      ],
+      "@controllers/*": [
+        "./src/controllers/*"
+      ],
+      "@services/*": [
+        "./src/services/*"
+      ],
+      "@utils/*": [
+        "./src/utils/*"
+      ],
+      "@custom-types/*": [
+        "./src/types/*"
+      ],
+      "@validators/*": [
+        "./src/validators/*"
+      ],
+      "@schedulers/*": [
+        "./src/schedulers/*"
+      ]
     },
     "resolveJsonModule": true,
-
     // Emit
     "outDir": "./dist",
     "removeComments": true,
     "sourceMap": true,
-
     // Interop Constraints
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-
     // Type Checking
     "strict": true,
     "noImplicitAny": true,
@@ -38,12 +54,21 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-
     // Completeness
     "skipLibCheck": true,
     "ignoreDeprecations": "5.0",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-    "include": ["src/**/*"],
-    "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "src/__tests__/**/*"
+  ]
 }

@@ -55,7 +55,7 @@ router.post(
 router.use(customerAuthentication); 
 
 // 2.1 Đăng xuất
-// Cần token để backend biết user nào đang logout (để clear session Redis)
+// Cần token để backend biết user nào đang logout (để clear session)
 router.post(
     '/logout',
     asyncHandler(accountController.logout.bind(accountController))

@@ -1,76 +1,100 @@
-import { Request, Response, NextFunction } from 'express';
-import ticketService from '../services/ticket.service';
-import { createTicketSchema, updateTicketSchema, queryTicketsSchema } from '../validators/ticket.validator';
-import { AuthRequest } from '@custom-types/common.type';
+import { Response } from 'express';
+import { AuthRequest, ApiResponse } from '@custom-types/common.type';
+import ticketService from '@services/ticket.service';
+import {
+  CreateTicketInput,
+  UpdateTicketInput,
+  TicketQueryInput,
+} from '@validators/ticket.validator';
 
 class TicketController {
-  async create(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const data = createTicketSchema.parse(req.body);
-      const ticket = await ticketService.create(req.user!.id, data);
-      res.status(201).json({
-        success: true,
-        message: 'Tạo phiếu hỗ trợ thành công',
-        data: ticket,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // GET /api/tickets - Get all tickets with pagination & filters
+  async getAllTickets(req: AuthRequest, res: Response) {
+    const query = req.query as unknown as TicketQueryInput;
+
+    const result = await ticketService.getAllTickets(query);
+
+    const response: ApiResponse = {
+      success: true,
+      data: result.tickets,
+      meta: {
+        page: result.meta.page,
+        limit: result.meta.limit,
+        total: result.meta.total,
+        totalPage: result.meta.totalPages,
+      },
+      message: 'Lấy danh sách phiếu hỗ trợ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async findAll(req: Request, res: Response, next: NextFunction) {
-    try {
-      const query = queryTicketsSchema.parse(req.query);
-      const result = await ticketService.findAll(query);
-      res.status(200).json({
-        success: true,
-        data: result.tickets,
-        pagination: result.pagination,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // GET /api/tickets/:id - Get ticket by ID
+  async getTicketById(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+
+    const ticket = await ticketService.getTicketById(id);
+
+    const response: ApiResponse = {
+      success: true,
+      data: ticket,
+      message: 'Lấy thông tin phiếu hỗ trợ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async findOne(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      const ticket = await ticketService.findOne(id);
-      res.status(200).json({
-        success: true,
-        data: ticket,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // POST /api/tickets - Create new ticket
+  async createTicket(req: AuthRequest, res: Response) {
+    const data = req.body as CreateTicketInput;
+    const userId = req.user!.id;
+
+    const ticket = await ticketService.createTicket(userId, data);
+
+    const response: ApiResponse = {
+      success: true,
+      data: ticket,
+      message: 'Tạo phiếu hỗ trợ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(201).json(response);
   }
 
-  async update(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      const data = updateTicketSchema.parse(req.body);
-      const ticket = await ticketService.update(id, data);
-      res.status(200).json({
-        success: true,
-        message: 'Cập nhật phiếu hỗ trợ thành công',
-        data: ticket,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // PUT /api/tickets/:id - Update ticket
+  async updateTicket(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const data = req.body as UpdateTicketInput;
+    const userId = req.user!.id; // Get updater ID for logging
+
+    const ticket = await ticketService.updateTicket(id, data, userId);
+
+    const response: ApiResponse = {
+      success: true,
+      data: ticket,
+      message: 'Cập nhật phiếu hỗ trợ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async delete(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      await ticketService.delete(id);
-      res.status(200).json({
-        success: true,
-        message: 'Xóa phiếu hỗ trợ thành công',
-      });
-    } catch (error) {
-      next(error);
-    }
+  // DELETE /api/tickets/:id - Delete ticket
+  async deleteTicket(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const userId = req.user!.id; // Get deleter ID for logging
+
+    await ticketService.deleteTicket(id, userId);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Xóa phiếu hỗ trợ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 }
 

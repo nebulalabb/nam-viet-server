@@ -8,10 +8,7 @@ import {
   PaySalaryInput,
   SalaryQueryInput,
 } from '@validators/salary.validator';
-import RedisService from './redis.service';
-
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
 
 // Salary calculation constants
 const STANDARD_WORK_HOURS_PER_MONTH = 208; // 26 days * 8 hours
@@ -23,9 +20,7 @@ const UNEMPLOYMENT_INSURANCE_RATE = 0.01; // BHTN 1%
 const TOTAL_INSURANCE_RATE =
   SOCIAL_INSURANCE_RATE + HEALTH_INSURANCE_RATE + UNEMPLOYMENT_INSURANCE_RATE; // 10.5%
 
-// Cache settings
-// const SALARY_CACHE_TTL = 3600;
-const SALARY_LIST_CACHE_TTL = 300;
+
 
 class SalaryService {
   // Get all salary records with filters
@@ -48,17 +43,6 @@ class SalaryService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `salary:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     // Build where clause
     const where: Prisma.SalaryWhereInput = {
@@ -170,9 +154,6 @@ class SalaryService {
         totalPages: Math.ceil(total / limitNum),
       },
     };
-
-    // Cache result
-    await redis.set(cacheKey, result, SALARY_LIST_CACHE_TTL);
 
     return result;
   }

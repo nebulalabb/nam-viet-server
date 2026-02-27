@@ -2,10 +2,6 @@ import { PrismaClient } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@utils/errors';
 // import { logActivity } from '@utils/logger';
 
-import CacheHelper from '@utils/redis.helper';
-import { sortedQuery } from '@utils/cache.util';
-
-
 const prisma = new PrismaClient();
 
 export interface DebtQueryParams {
@@ -60,21 +56,11 @@ export interface DebtDetailParams {
   type: 'customer' | 'supplier';
   year?: number;
 }
-
 class SmartDebtService {
-  private cache: CacheHelper;
-
-  constructor() {
-    this.cache = new CacheHelper();
-  }
-
   // =========================================================================
   // 1. GET ALL (ĐÃ FIX LỖI LỌC TỈNH CHO NCC VÀ ALL)
   // =========================================================================
   async getAll(params: DebtQueryParams) {
-    const queryHash = JSON.stringify(sortedQuery(params));
-    const cachedData = await this.cache.getDebtList(queryHash);
-    if (cachedData) return cachedData;
 
     const { page = 1, limit = 20, search, status, year, assignedUserId, province, type } = params;
     const skip = (Number(page) - 1) * Number(limit);
@@ -265,7 +251,6 @@ class SmartDebtService {
       }
     };
 
-    await this.cache.setDebtList(queryHash, result);
     return result;
   }
 
@@ -348,21 +333,14 @@ class SmartDebtService {
   }
 
   // =========================================================================
-  // 2. GET DETAIL (CÓ REDIS CACHE + CÁC TRƯỜNG MỚI TỪ DB THẬT)
+  // 2. GET DETAIL (CÁC TRƯỜNG MỚI TỪ DB THẬT)
   // =========================================================================
   async getDetail(id: number, type: 'customer' | 'supplier', year?: number) {
     const targetYear = year || new Date().getFullYear();
     const periodName = String(targetYear);
 
-    // 🟢 BƯỚC 1: KIỂM TRA CACHE
-    const cachedData = await this.cache.getDebtDetail(id, type, targetYear);
-    if (cachedData) {
-      console.log(`🚀 Cache Hit: Smart Debt Detail [${type}:${id}:${targetYear}]`);
-      return cachedData;
-    }
-
-    // 🟢 BƯỚC 2: LOGIC QUERY DB
-    console.log(`🐢 Cache Miss: Querying DB for Detail...`);
+    // 🟢 LOGIC QUERY DB
+    console.log(`🐢 Querying DB for Detail...`);
 
     const startOfYear = new Date(targetYear, 0, 1);
     const endOfYear = new Date(targetYear, 11, 31, 23, 59, 59);
@@ -611,14 +589,11 @@ class SmartDebtService {
       }
     };
 
-    // 🟢 BƯỚC 3: LƯU VÀO CACHE
-    await this.cache.setDebtDetail(id, type, targetYear, response);
-
     return response;
   }
 
   // =================================================================
-  // 1. SYNC FULL (Đồng bộ toàn bộ lịch sử & Xóa Cache)
+  // 1. SYNC FULL (Đồng bộ toàn bộ lịch sử)
   // =================================================================
   async syncFull(data: SyncDebtParams) {
     const { customerId, supplierId, notes, assignedUserId } = data;
@@ -800,9 +775,7 @@ class SmartDebtService {
       timeout: 120000
     });
 
-    // 🟢 BƯỚC 2: XÓA CACHE (SAU KHI TRANSACTION THÀNH CÔNG)
-    await this.cache.invalidateSmartDebt();
-    console.log(`🧹 Cache cleared after Sync Full for ${customerId ? 'Customer' : 'Supplier'}`);
+    console.log(`🧹 Sync Full completed for ${customerId ? 'Customer' : 'Supplier'}`);
 
     // 🟢 BƯỚC 3: RETURN FINAL RESULT
     return result;
@@ -1029,9 +1002,7 @@ class SmartDebtService {
       };
     });
 
-    // 🟢 BƯỚC 2: XÓA CACHE (SAU KHI TRANSACTION THÀNH CÔNG)
-    await this.cache.invalidateSmartDebt();
-    console.log(`🧹 Cache cleared after Sync Snap for ${customerId ? 'Customer' : 'Supplier'}`);
+    console.log(`🧹 Sync Snap completed for ${customerId ? 'Customer' : 'Supplier'}`);
 
     // 🟢 BƯỚC 3: RETURN FINAL RESULT
     return result;
@@ -1091,9 +1062,6 @@ class SmartDebtService {
 
     const duration = ((Date.now() - start) / 1000).toFixed(2);
     console.log(`✅ [Batch Full] Hoàn tất sau ${duration}s. Thành công: ${successCount}/${totalTasks}, Thất bại: ${failCount}`);
-
-    // 🔥 XÓA CACHE TOÀN CỤC LẦN CUỐI
-    await this.cache.invalidateSmartDebt();
 
     return {
       year: targetYear,
@@ -1159,8 +1127,6 @@ class SmartDebtService {
 
     const duration = ((Date.now() - start) / 1000).toFixed(2);
     console.log(`✅ [Batch Snap] Hoàn tất sau ${duration}s. Thành công: ${successCount}/${totalTasks}`);
-
-    await this.cache.invalidateSmartDebt();
 
     return {
       year: targetYear,

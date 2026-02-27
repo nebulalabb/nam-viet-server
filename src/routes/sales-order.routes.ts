@@ -95,11 +95,4 @@ router.delete(
   asyncHandler(salesOrderController.delete.bind(salesOrderController))
 );
 
-// POST /api/sales-orders/refresh - Refresh cache
-router.post(
-  '/refresh',
-  authorize('view_sales_orders'),
-  asyncHandler(salesOrderController.refresh.bind(salesOrderController))
-);
-
 export default router;

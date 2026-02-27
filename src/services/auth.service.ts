@@ -2,13 +2,15 @@ import { PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword } from '@utils/password';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@utils/jwt';
 import { AuthenticationError, NotFoundError, ValidationError } from '@utils/errors';
-import RedisService, { CachePrefix } from './redis.service';
 import { JwtPayload } from '@custom-types/common.type';
 import { logActivity } from '@utils/logger';
 import emailService from './email.service';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
+
+// Local Memory Maps for Rate Limiting and Token Blacklisting
+const loginAttemptsMap = new Map<string, { attempts: number; expiry: number }>();
+const tokenBlacklist = new Set<string>();
 
 // Constants
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -17,10 +19,11 @@ const LOGIN_LOCK_TIME = 15 * 60;
 class AuthService {
   // Login user
   async login(email: string, password: string, ipAddress?: string) {
-    const loginAttempts = await this.getLoginAttempts(email);
+    const loginAttempts = this.getLoginAttempts(email);
     if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-      const lockTime = await redis.ttl(`${CachePrefix.RATE_LIMIT}login:${email}`);
-      const minutesLeft = Math.ceil(lockTime / 60);
+      const lockData = loginAttemptsMap.get(email);
+      const lockTimeRemaining = lockData ? Math.ceil((lockData.expiry - Date.now()) / 1000) : 0;
+      const minutesLeft = Math.ceil(lockTimeRemaining / 60);
       throw new AuthenticationError(
         `Tài khoản bị khóa do đăng nhập không thành công quá nhiều lần. Vui lòng thử lại sau ${minutesLeft} phút.`
       );
@@ -48,7 +51,7 @@ class AuthService {
     });
 
     if (!user) {
-      await this.incrementLoginAttempts(email);
+      this.incrementLoginAttempts(email);
       throw new AuthenticationError('Email hoặc mật khẩu không đúng');
     }
 
@@ -64,11 +67,11 @@ class AuthService {
 
     const isPasswordValid = await comparePassword(password, user.passwordHash);
     if (!isPasswordValid) {
-      await this.incrementLoginAttempts(email);
+      this.incrementLoginAttempts(email);
       throw new AuthenticationError('Email hoặc mật khẩu không đúng');
     }
 
-    await this.clearLoginAttempts(email);
+    this.clearLoginAttempts(email);
 
     // Create OTP code and send via email
     const { code, expiresIn } = await this.createOTPCode(user.id, user.email, ipAddress);
@@ -98,10 +101,9 @@ class AuthService {
 
   // Logout user
   async logout(userId: number, accessToken: string) {
-    const tokenTTL = 15 * 60;
-    await redis.set(`${CachePrefix.BLACKLIST}${accessToken}`, 'true', tokenTTL);
+    tokenBlacklist.add(accessToken);
+    // Auto cleanup logic could be added here, but for simplicity we rely on JWT maxAge
 
-    await redis.del(`${CachePrefix.SESSION}refresh:${userId}`);
 
     logActivity('logout', userId, 'auth');
 
@@ -110,12 +112,10 @@ class AuthService {
 
   // Refresh access token
   async refreshToken(refreshToken: string) {
+    // 1. JWT verification will throw if token is invalid or expired
     const decoded = verifyRefreshToken(refreshToken);
 
-    const storedToken = await redis.get(`${CachePrefix.SESSION}refresh:${decoded.id}`);
-    if (!storedToken || storedToken !== refreshToken) {
-      throw new AuthenticationError('Refresh token không hợp lệ');
-    }
+
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
@@ -185,8 +185,6 @@ class AuthService {
       action: 'change_password',
     });
 
-    await redis.del(`${CachePrefix.SESSION}refresh:${userId}`);
-
     // Send notification email
     await emailService.sendPasswordChangedEmail(user.email, user.fullName);
 
@@ -218,9 +216,18 @@ class AuthService {
     }
 
     const resetToken = this.generateResetToken();
-    const resetTokenTTL = 60 * 60;
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    
 
-    await redis.set(`${CachePrefix.SESSION}reset:${resetToken}`, user.id.toString(), resetTokenTTL);
+    await prisma.verificationCode.create({
+      data: {
+        userId: user.id,
+        email: user.email,
+        code: resetToken,
+        type: 'forgot_password' as any,
+        expiresAt,
+      },
+    });
 
     // Send email with reset link
     const emailSent = await emailService.sendPasswordResetEmail(
@@ -244,12 +251,19 @@ class AuthService {
 
   // Reset password with token
   async resetPassword(token: string, newPassword: string) {
-    const userIdStr = await redis.get(`${CachePrefix.SESSION}reset:${token}`);
-    if (!userIdStr) {
+    const verificationCode = await prisma.verificationCode.findFirst({
+      where: {
+        code: token,
+        type: 'forgot_password' as any,
+        isUsed: false,
+      },
+    });
+
+    if (!verificationCode || new Date() > verificationCode.expiresAt) {
       throw new AuthenticationError('Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
     }
 
-    const userId = parseInt(userIdStr);
+    const userId = verificationCode.userId;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -266,9 +280,10 @@ class AuthService {
       data: { passwordHash: hashedPassword },
     });
 
-    await redis.del(`${CachePrefix.SESSION}reset:${token}`);
-
-    await redis.del(`${CachePrefix.SESSION}refresh:${userId}`);
+    await prisma.verificationCode.update({
+      where: { id: verificationCode.id },
+      data: { isUsed: true, usedAt: new Date() },
+    });
 
     logActivity('update', userId, 'users', {
       recordId: userId,
@@ -329,26 +344,32 @@ class AuthService {
   }
 
   // Get login attempts count
-  private async getLoginAttempts(email: string): Promise<number> {
-    const key = `${CachePrefix.RATE_LIMIT}login:${email}`;
-    const attempts = await redis.get(key);
-    return attempts ? parseInt(attempts) : 0;
+  private getLoginAttempts(email: string): number {
+    const data = loginAttemptsMap.get(email);
+    if (!data) return 0;
+    if (Date.now() > data.expiry) {
+      loginAttemptsMap.delete(email);
+      return 0;
+    }
+    return data.attempts;
   }
 
   // Increment login attempts
-  private async incrementLoginAttempts(email: string) {
-    const key = `${CachePrefix.RATE_LIMIT}login:${email}`;
-    const attempts = await redis.incr(key);
-
-    if (attempts === 1) {
-      await redis.expire(key, LOGIN_LOCK_TIME);
+  private incrementLoginAttempts(email: string) {
+    const data = loginAttemptsMap.get(email);
+    if (data && Date.now() <= data.expiry) {
+      data.attempts += 1;
+    } else {
+      loginAttemptsMap.set(email, {
+        attempts: 1,
+        expiry: Date.now() + LOGIN_LOCK_TIME * 1000,
+      });
     }
   }
 
   // Clear login attempts
-  private async clearLoginAttempts(email: string) {
-    const key = `${CachePrefix.RATE_LIMIT}login:${email}`;
-    await redis.del(key);
+  private clearLoginAttempts(email: string) {
+    loginAttemptsMap.delete(email);
   }
 
   // Generate reset token
@@ -514,8 +535,8 @@ class AuthService {
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    const refreshTokenTTL = 7 * 24 * 60 * 60; // 7 days in seconds
-    await redis.set(`${CachePrefix.SESSION}refresh:${user.id}`, refreshToken, refreshTokenTTL);
+
+    // JWT signature handles the secure validation.
 
     await this.updateLastLogin(user.id);
 
@@ -626,5 +647,8 @@ class AuthService {
     `;
   }
 }
+
+// Export token blacklist for middleware to use
+export { tokenBlacklist };
 
 export default new AuthService();

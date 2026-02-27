@@ -1,7 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { hashPassword } from '@utils/password';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
 import uploadService from './upload.service';
 import type {
@@ -12,11 +11,6 @@ import type {
 } from '@validators/user.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-// Cache settings
-const USER_CACHE_TTL = 3600;
-const USER_LIST_CACHE_TTL = 300;
 
 class UserService {
   // Get all users with pagination, filters, and search
@@ -36,17 +30,6 @@ class UserService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `user:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached; // Redis already parses JSON
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     // Build where clause
     const where: Prisma.UserWhereInput = {
@@ -118,25 +101,10 @@ class UserService {
       },
     };
 
-    // Cache result
-    await redis.set(cacheKey, result, USER_LIST_CACHE_TTL); // Redis auto-stringifies
-
     return result;
   }
 
-  // Get user by ID
   async getUserById(id: number) {
-    const cacheKey = `user:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
-
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
@@ -185,9 +153,6 @@ class UserService {
     if (!user) {
       throw new NotFoundError('Không tìm thấy nhân viên!');
     }
-
-    // Cache result
-    await redis.set(cacheKey, user, USER_CACHE_TTL); // Redis auto-stringifies
 
     return user;
   }
@@ -275,8 +240,6 @@ class UserService {
         },
       },
     });
-
-    await redis.flushPattern(`user:list:*`);
 
     logActivity('create', createdBy, 'users', {
       recordId: user.id,
@@ -394,10 +357,6 @@ class UserService {
       newValue: updatedUser,
     });
 
-    // Invalidate cache
-    await redis.del(`user:${id}`);
-    await redis.flushPattern(`user:list:*`);
-
     return updatedUser;
   }
 
@@ -436,10 +395,6 @@ class UserService {
       recordId: id,
       oldValue: user,
     });
-
-    // Invalidate cache
-    await redis.del(`user:${id}`);
-    await redis.flushPattern(`user:list:*`);
 
     return { message: 'Xóa nhân viên thành công' };
   }
@@ -483,10 +438,6 @@ class UserService {
       newValue: { status: data.status },
     });
 
-    // Invalidate cache
-    await redis.del(`user:${id}`);
-    await redis.flushPattern(`user:list:*`);
-
     return updatedUser;
   }
 
@@ -524,10 +475,6 @@ class UserService {
       newValue: { canEditProfile },
     });
 
-    // Invalidate cache
-    await redis.del(`user:${id}`);
-    await redis.flushPattern(`user:list:*`);
-
     return updatedUser;
   }
 
@@ -560,9 +507,6 @@ class UserService {
       },
     });
 
-    // Invalidate cache
-    await redis.del(`user:${userId}`);
-
     return updatedUser;
   }
 
@@ -589,9 +533,6 @@ class UserService {
       where: { id: userId },
       data: { avatarUrl: null },
     });
-
-    // Invalidate cache
-    await redis.del(`user:${userId}`);
 
     return { message: 'Xóa ảnh thành công' };
   }
@@ -638,10 +579,6 @@ class UserService {
       action: 'password_change',
       description: `Admin đã thay đổi mật khẩu cho ${user.fullName}`,
     });
-
-    // Invalidate cache
-    await redis.del(`user:${userId}`);
-    await redis.flushPattern(`user:list:*`);
 
     return updatedUser;
   }

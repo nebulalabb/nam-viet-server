@@ -1,6 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
 import type {
   CreateWarehouseInput,
@@ -9,10 +8,6 @@ import type {
 } from '@validators/warehouse.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const WAREHOUSE_CACHE_TTL = 3600;
-const WAREHOUSE_LIST_CACHE_TTL = 300;
 
 class WarehouseService {
   async getAllWarehouses(query: QueryWarehousesInput) {
@@ -31,18 +26,6 @@ class WarehouseService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `warehouse:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.WarehouseWhereInput = {
       ...(search && {
@@ -169,22 +152,10 @@ class WarehouseService {
       message: 'Lấy danh sách kho thành công',
     };
 
-    await redis.set(cacheKey, result, WAREHOUSE_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getWarehouseById(id: number) {
-    const cacheKey = `warehouse:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache ${cacheKey}, truy vấn database...`);
 
     const warehouse = await prisma.warehouse.findUnique({
       where: { id },
@@ -242,8 +213,6 @@ class WarehouseService {
     if (!warehouse) {
       throw new NotFoundError('Không tìm thấy kho này');
     }
-
-    await redis.set(cacheKey, warehouse, WAREHOUSE_CACHE_TTL);
 
     return warehouse;
   }
@@ -304,8 +273,6 @@ class WarehouseService {
       recordId: warehouse.id,
       newValue: warehouse,
     });
-
-    await redis.flushPattern('warehouse:list:*');
 
     return warehouse;
   }
@@ -379,9 +346,6 @@ class WarehouseService {
       newValue: updatedWarehouse,
     });
 
-    await redis.flushPattern('warehouse:list:*');
-    await redis.del(`warehouse:${id}`);
-
     return updatedWarehouse;
   }
 
@@ -418,9 +382,6 @@ class WarehouseService {
       recordId: id,
       oldValue: warehouse,
     });
-
-    await redis.flushPattern('warehouse:list:*');
-    await redis.del(`warehouse:${id}`);
 
     return { message: 'Đã xóa kho thành công' };
   }

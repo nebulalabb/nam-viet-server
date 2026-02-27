@@ -82,20 +82,6 @@ router.get('/health', performanceController.healthCheck);
 
 /**
  * @swagger
- * /api/performance/cache-stats:
- *   get:
- *     summary: Get Redis cache statistics
- *     tags: [Performance]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Cache stats retrieved successfully
- */
-router.get('/cache-stats', authentication, performanceController.getCacheStats);
-
-/**
- * @swagger
  * /api/performance/clear:
  *   post:
  *     summary: Clear performance metrics (Admin only)

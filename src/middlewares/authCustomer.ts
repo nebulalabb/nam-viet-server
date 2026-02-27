@@ -3,10 +3,9 @@ import { AuthRequest } from '@custom-types/common.type';
 import { AuthenticationError, AuthorizationError } from '@utils/errors';
 import { verifyAccessToken } from '@utils/cs-jwt'; 
 import { PrismaClient } from '@prisma/client';
-import CustomerRedisService from '@services/cs-redis.service'; // ✅ Import CS Redis
+import { customerTokenBlacklist } from '@services/cs-auth.service';
 
 const prisma = new PrismaClient();
-const csRedis = CustomerRedisService.getInstance(); // ✅ Instance Redis
 
 // Hàm xử lý chính (Async)
 const verifyCustomer = async (req: AuthRequest, _res: Response, next: NextFunction) => {
@@ -18,9 +17,8 @@ const verifyCustomer = async (req: AuthRequest, _res: Response, next: NextFuncti
 
         const token = authHeader.split(' ')[1];
 
-        // ✅ 1. Check Redis Blacklist (Quan trọng)
-        const isBlacklisted = await csRedis.isTokenBlacklisted(token);
-        if (isBlacklisted) {
+        // ✅ 1. Check Memory Blacklist (Quan trọng)
+        if (customerTokenBlacklist.has(token)) {
             throw new AuthenticationError('Token has been revoked (Logged out)');
         }
 
@@ -32,7 +30,7 @@ const verifyCustomer = async (req: AuthRequest, _res: Response, next: NextFuncti
         }
 
         // ✅ 3. Lấy thông tin Account
-        // Có thể cache bước này vào Redis để tăng tốc nếu muốn (đã làm trong Service getAccount)
+        // Có thể lưu bước này vào memory để tăng tốc nếu muốn (đã làm trong Service getAccount)
         // Nhưng ở middleware để an toàn cứ query DB check status isActive
         const account = await prisma.customerAccount.findUnique({
             where: { customerId: decoded.customerId },
@@ -82,9 +80,8 @@ export const optionalCustomerAuthentication = async (req: Request, _res: Respons
 
         const token = authHeader.split(' ')[1];
 
-        // ✅ 2. Check Blacklist cho cả Optional Auth
-        const isBlacklisted = await csRedis.isTokenBlacklisted(token);
-        if (isBlacklisted) {
+        // ✅ 2. Check Memory Blacklist cho cả Optional Auth
+        if (customerTokenBlacklist.has(token)) {
             // Token không hợp lệ -> coi như chưa đăng nhập -> NEXT
             return next();
         }

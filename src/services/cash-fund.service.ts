@@ -7,26 +7,11 @@ import {
 import { PrismaClient } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@utils/errors';
 import { logActivity } from '@utils/logger';
-import RedisService from './redis.service';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CASH_FUND_CACHE_TTL = 3600;
-const CASH_FUND_LIST_CACHE_TTL = 600;
 
 export class CashFundService {
   async getDailyCashFund(date: Date) {
-    const cacheKey = `cash-fund:${date.toISOString().split('T')[0]}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const fund = await prisma.cashFund.findUnique({
       where: { fundDate: date },
@@ -121,20 +106,10 @@ export class CashFundService {
       closingBalance: Number(fund.openingBalance) + totalReceipts - totalPayments,
     };
 
-    await redis.set(cacheKey, result, CASH_FUND_CACHE_TTL);
     return result;
   }
 
   async getCashFundList(filter: CashFundFilter) {
-    const cacheKey = `cash-fund:list:${JSON.stringify(sortedQuery(filter))}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const where: any = {};
 
@@ -204,7 +179,7 @@ export class CashFundService {
       statistics,
     };
 
-    await redis.set(cacheKey, result, CASH_FUND_LIST_CACHE_TTL);
+    return result;
 
     return result;
   }
@@ -250,7 +225,7 @@ export class CashFundService {
       openingBalance: data.openingBalance || 0,
     });
 
-    await redis.flushPattern('cash-fund:list:*');
+    return fund;
 
     return fund;
   }
@@ -298,9 +273,7 @@ export class CashFundService {
       openingBalance: data.openingBalance,
     });
 
-    const cacheKey = `cash-fund:${date.toISOString().split('T')[0]}`;
-    await redis.del(cacheKey);
-    await redis.flushPattern('cash-fund:list:*');
+    return updated;
 
     return updated;
   }
@@ -413,10 +386,6 @@ export class CashFundService {
       isLocked: true,
     });
 
-    const cacheKey = `cash-fund:${date.toISOString().split('T')[0]}`;
-    await redis.del(cacheKey);
-    await redis.flushPattern('cash-fund:list:*');
-
     const closingBalance = Number(locked.openingBalance) + Number(locked.totalReceipts) - Number(locked.totalPayments);
 
     return {
@@ -484,23 +453,12 @@ export class CashFundService {
       isLocked: false,
     });
 
-    const cacheKey = `cash-fund:${date.toISOString().split('T')[0]}`;
-    await redis.del(cacheKey);
-    await redis.flushPattern('cash-fund:list:*');
+    return unlocked;
 
     return unlocked;
   }
 
   async getCashFundSummary(startDate: Date, endDate: Date) {
-    const cacheKey = `cash-fund:summary:${startDate.toISOString().split('T')[0]}:${endDate.toISOString().split('T')[0]}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const funds = await prisma.cashFund.findMany({
       where: {
@@ -533,21 +491,12 @@ export class CashFundService {
 
     summary.netChange = summary.closingBalance - summary.openingBalance;
 
-    await redis.set(cacheKey, summary, CASH_FUND_CACHE_TTL);
+    return summary;
 
     return summary;
   }
 
   async getDiscrepancies(date: Date) {
-    const cacheKey = `cash-fund:discrepancies:${date.toISOString().split('T')[0]}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const fund = await prisma.cashFund.findUnique({
       where: { fundDate: date },
@@ -624,7 +573,7 @@ export class CashFundService {
       payments,
     };
 
-    await redis.set(cacheKey, result, CASH_FUND_CACHE_TTL);
+    return result;
 
     return result;
   }

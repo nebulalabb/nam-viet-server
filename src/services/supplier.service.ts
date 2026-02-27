@@ -1,19 +1,13 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
 import type {
   CreateSupplierInput,
   UpdateSupplierInput,
   QuerySuppliersInput,
 } from '@validators/supplier.validator';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const SUPPLIER_CACHE_TTL = 3600;
-const SUPPLIER_LIST_CACHE_TTL = 600;
 
 class SupplierService {
   async getAllSuppliers(query: QuerySuppliersInput) {
@@ -30,17 +24,6 @@ class SupplierService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const cacheKey = `supplier:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.SupplierWhereInput = {
       deletedAt: null,
@@ -115,22 +98,10 @@ class SupplierService {
       },
     };
 
-    await redis.set(cacheKey, result, SUPPLIER_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getSupplierById(id: number) {
-    const cacheKey = `supplier:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const supplier = await prisma.supplier.findUnique({
       where: {
@@ -186,8 +157,6 @@ class SupplierService {
     if (!supplier) {
       throw new NotFoundError('Nhà cung cấp không tồn tại');
     }
-
-    await redis.set(cacheKey, supplier, SUPPLIER_CACHE_TTL);
 
     return supplier;
   }
@@ -248,8 +217,6 @@ class SupplierService {
       recordId: supplier.id,
       newValue: supplier,
     });
-
-    await redis.flushPattern(`supplier:list:*`);
 
     return supplier;
   }
@@ -323,9 +290,6 @@ class SupplierService {
       newValue: updatedSupplier,
     });
 
-    await redis.del(`supplier:${id}`);
-    await redis.flushPattern(`supplier:list:*`);
-
     return updatedSupplier;
   }
 
@@ -369,9 +333,6 @@ class SupplierService {
       recordId: id,
       oldValue: supplier,
     });
-
-    await redis.del(`supplier:${id}`);
-    await redis.flushPattern(`supplier:list:*`);
 
     return { message: 'Xóa nhà cung cấp thành công' };
   }

@@ -334,6 +334,23 @@ async function main() {
     // SETTINGS
     // ============================================================
     { key: 'manage_settings', name: 'Quản lý cài đặt hệ thống', module: 'settings' },
+
+    // ============================================================
+    // CRM (Tickets & Tasks)
+    // ============================================================
+    // Tickets
+    { key: 'view_tickets', name: 'Xem phiếu hỗ trợ', module: 'crm' },
+    { key: 'create_ticket', name: 'Tạo phiếu hỗ trợ', module: 'crm' },
+    { key: 'update_ticket', name: 'Cập nhật phiếu hỗ trợ', module: 'crm' },
+    { key: 'delete_ticket', name: 'Xóa phiếu hỗ trợ', module: 'crm' },
+    { key: 'assign_ticket', name: 'Phân công phiếu hỗ trợ', module: 'crm' },
+
+    // Tasks
+    { key: 'view_tasks', name: 'Xem nhiệm vụ', module: 'crm' },
+    { key: 'create_task', name: 'Tạo nhiệm vụ', module: 'crm' },
+    { key: 'update_task', name: 'Cập nhật nhiệm vụ', module: 'crm' },
+    { key: 'delete_task', name: 'Xóa nhiệm vụ', module: 'crm' },
+    { key: 'assign_task', name: 'Phân công nhiệm vụ', module: 'crm' },
   ];
 
   const permissions = await Promise.all(

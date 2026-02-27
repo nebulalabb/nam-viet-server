@@ -1,8 +1,7 @@
 import { Prisma, PrismaClient, RoleStatus } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
-import { invalidatePermissionCache } from '@middlewares/authorize';
+
 import type {
   AssignPermissionsInput,
   CreateRoleInput,
@@ -11,11 +10,7 @@ import type {
 } from '@validators/role.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
 
-// Cache settings
-const ROLE_CACHE_TTL = 3600;
-const ROLE_LIST_CACHE_TTL = 3600;
 
 class RoleService {
   async getAllRoles(query: QueryRolesInput) {
@@ -31,18 +26,6 @@ class RoleService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `role:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.RoleWhereInput = {
       ...(search && {
@@ -91,8 +74,6 @@ class RoleService {
       message: 'Success',
     };
 
-    await redis.set(cacheKey, result, ROLE_LIST_CACHE_TTL);
-
     return result;
   }
 
@@ -132,9 +113,6 @@ class RoleService {
       roleKey: role.roleKey,
       roleName: role.roleName,
     });
-
-    // Invalidate list cache
-    await redis.flushPattern('role:*');
 
     return role;
   }
@@ -179,18 +157,12 @@ class RoleService {
         },
       },
     });
-
     // Log activity
     logActivity('update', updatedBy, 'roles', {
       recordId: id,
       roleKey: role.roleKey,
       changes: data,
     });
-
-    // Invalidate caches
-    await redis.del(`role:${id}`);
-    await redis.del(`role:permissions:${id}`);
-    await redis.flushPattern('role:*');
 
     return updatedRole;
   }
@@ -235,28 +207,11 @@ class RoleService {
       roleName: role.roleName,
     });
 
-    // Invalidate caches
-    await redis.del(`role:${id}`);
-    await redis.del(`role:permissions:${id}`);
-    await redis.flushPattern('role:*');
-
     return { message: 'Role xóa thành công' };
   }
 
   // Get role by ID
   async getRoleById(id: number) {
-    // Check cache
-    const cacheKey = `role:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache ${cacheKey}, truy vấn database...`);
-
     const role = await prisma.role.findUnique({
       where: { id },
       select: {
@@ -280,21 +235,11 @@ class RoleService {
       throw new NotFoundError('Role không tìm thấy');
     }
 
-    // Cache result
-    await redis.set(cacheKey, role, ROLE_CACHE_TTL);
-
     return role;
   }
 
   // Get role permissions
   async getRolePermissions(roleId: number) {
-    // Check cache
-    const cacheKey = `role:permissions:${roleId}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
     // Verify role exists
     const role = await prisma.role.findUnique({
       where: { id: roleId },
@@ -346,9 +291,6 @@ class RoleService {
       grouped,
       total: permissions.length,
     };
-
-    // Cache result
-    await redis.set(cacheKey, result, ROLE_CACHE_TTL);
 
     return result;
   }
@@ -408,9 +350,7 @@ class RoleService {
       newValue: { permissionIds: data.permissionIds },
     });
 
-    // Invalidate caches
-    await redis.flushPattern(`role:*`);
-    await invalidatePermissionCache(roleId);
+
 
     // Get updated permissions
     const result = await this.getRolePermissions(roleId);
@@ -468,9 +408,7 @@ class RoleService {
       newValue: { permissionId },
     });
 
-    // Invalidate caches
-    await redis.flushPattern(`role:*`);
-    await invalidatePermissionCache(roleId);
+
 
     return { message: 'Đã thêm quyền thành công' };
   }
@@ -497,9 +435,7 @@ class RoleService {
       oldValue: { permissionId },
     });
 
-    // Invalidate caches
-    await redis.flushPattern(`role:*`);
-    await invalidatePermissionCache(roleId);
+
 
     return { message: 'Đã xóa quyền thành công' };
   }

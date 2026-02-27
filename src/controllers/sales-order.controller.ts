@@ -125,16 +125,6 @@ class SalesOrderController {
     });
   }
 
-  // POST /api/sales-orders/refresh - Refresh cache
-  async refresh(_req: AuthRequest, res: Response) {
-    const result = await salesOrderService.refresh();
-
-    res.status(200).json({
-      success: true,
-      message: result.message,
-      timestamp: new Date().toISOString(),
-    });
-  }
 }
 
 export default new SalesOrderController();

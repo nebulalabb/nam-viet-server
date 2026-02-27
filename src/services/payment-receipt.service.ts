@@ -10,14 +10,8 @@ import {
   PostReceiptInput,
   PaymentReceiptQueryInput,
 } from '@validators/payment-receipt.validator';
-import { sortedQuery } from '@utils/redis';
-import RedisService from './redis.service';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PAYMENT_RECEIPT_CACHE_TTL = 3600;
-const PAYMENT_RECEIPT_LIST_CACHE_TTL = 600;
 
 class PaymentReceiptService {
   private async generateReceiptCode(): Promise<string> {
@@ -56,17 +50,6 @@ class PaymentReceiptService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
-
-    // Cache key
-    const cacheKey = `payment-receipt:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     // Xử lý approvalStatus
     let approvalStatusWhere: any = {};
@@ -227,23 +210,10 @@ class PaymentReceiptService {
       statistics,
     };
 
-    await redis.set(cacheKey, result, PAYMENT_RECEIPT_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `payment-receipt:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`⚠️ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
-
     const receipt = await prisma.paymentReceipt.findUnique({
       where: { id },
       include: {
@@ -292,8 +262,6 @@ class PaymentReceiptService {
     if (!receipt) {
       throw new NotFoundError('Không tìm thấy phiếu thu');
     }
-
-    await redis.set(cacheKey, receipt, PAYMENT_RECEIPT_CACHE_TTL);
 
     return receipt;
   }
@@ -377,8 +345,6 @@ class PaymentReceiptService {
       return receipt;
     });
 
-    await redis.flushPattern('payment-receipt:list:*');
-
     logActivity('create', userId, 'payment_receipts', {
       recordId: result.id,
       receiptCode: result.receiptCode,
@@ -447,9 +413,6 @@ class PaymentReceiptService {
       changes: data,
     });
 
-    await redis.flushPattern('payment-receipt:list:*');
-    await redis.del(`payment-receipt:${id}`);
-
     return result;
   }
 
@@ -490,9 +453,6 @@ class PaymentReceiptService {
       action: 'approve_receipt',
       receiptCode: receipt.receiptCode,
     });
-
-    await redis.flushPattern('payment-receipt:list:*');
-    await redis.del(`payment-receipt:${id}`);
 
     return updatedReceipt;
   }
@@ -544,17 +504,6 @@ class PaymentReceiptService {
       receiptCode: receipt.receiptCode,
     });
 
-    // Xóa cache: Phiếu, Quỹ tiền mặt, Khách hàng, Đơn hàng
-    await redis.flushPattern('payment-receipt:list:*');
-    await redis.del(`payment-receipt:${id}`);
-    await redis.flushPattern('cash-fund:*');
-    if (receipt.customerId) {
-      await redis.del(`customer:${receipt.customerId}`);
-    }
-    if (receipt.orderId) {
-      await redis.del(`sales-order:${receipt.orderId}`);
-    }
-
     return updatedReceipt;
   }
 
@@ -598,9 +547,6 @@ class PaymentReceiptService {
       recordId: id,
       receiptCode: receipt.receiptCode,
     });
-
-    await redis.flushPattern('payment-receipt:list:*');
-    await redis.del(`payment-receipt:${id}`);
 
     return { message: 'Xóa phiếu thu thành công' };
   }
@@ -845,25 +791,10 @@ class PaymentReceiptService {
     };
   }
 
-  async refreshCache() {
-    try {
-      // Xóa tất cả payment receipt cache
-      await redis.flushPattern('payment-receipt:*');
-
-      return {
-        message: 'Cache đã được làm mới',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error('❌ Lỗi khi làm mới cache:', error);
-      throw error;
-    }
-  }
-
   async sendEmail(id: number, userId: number) {
     const receipt = await this.getById(id);
 
-    if (!receipt.customer?.email) {
+    if (!receipt.customerRef?.email) {
       throw new ValidationError('Khách hàng không có địa chỉ email');
     }
 
@@ -877,12 +808,8 @@ class PaymentReceiptService {
     logActivity('send_email', userId, 'payment_receipts', {
       recordId: id,
       receiptCode: receipt.receiptCode,
-      to: receipt.customer.email,
+      to: receipt.customerRef.email,
     });
-
-    // Invalidate cache
-    await redis.del(`payment-receipt:${id}`);
-    await redis.flushPattern('payment-receipt:list:*');
 
     return receipt;
   }

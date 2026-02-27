@@ -1,21 +1,9 @@
 import { PrismaClient } from '@prisma/client';
-import RedisService from './redis.service';
-
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-// Cache settings
-const PERMISSION_CACHE_TTL = 3600;
 
 class PermissionService {
   // Get all permissions (optionally grouped by module)
   async getAllPermissions() {
-    const cacheKey = 'permissions:all';
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
     const permissions = await prisma.permission.findMany({
       orderBy: [{ module: 'asc' }, { permissionName: 'asc' }],
       select: {
@@ -42,9 +30,6 @@ class PermissionService {
       permissions,
       grouped,
     };
-
-    // Cache result
-    await redis.set(cacheKey, result, PERMISSION_CACHE_TTL);
 
     return result;
   }
@@ -85,10 +70,6 @@ class PermissionService {
     return hasPermission;
   }
 
-  // Invalidate all permissions cache
-  async invalidateCache() {
-    await redis.del('permissions:all');
-  }
 }
 
 export default new PermissionService();

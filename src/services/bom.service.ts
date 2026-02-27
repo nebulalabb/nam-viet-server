@@ -1,6 +1,5 @@
 import { PrismaClient, Prisma, ProductType } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
-import RedisService from './redis.service';
 import { logActivity } from '@utils/logger';
 import {
   CreateBomInput,
@@ -10,10 +9,6 @@ import {
 } from '@validators/bom.validator';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const BOM_CACHE_TTL = 3600;
-const BOM_LIST_CACHE_TTL = 300;
 
 class BomService {
   async getAll(query: BomQueryInput) {
@@ -30,18 +25,6 @@ class BomService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `bom:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.BomWhereInput = {
       ...(status && { status }),
@@ -113,22 +96,10 @@ class BomService {
       message: 'Lấy danh sách BOM thành công',
     };
 
-    await redis.set(cacheKey, result, BOM_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `bom:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const bom = await prisma.bom.findUnique({
       where: { id },
@@ -196,8 +167,6 @@ class BomService {
     if (!bom) {
       throw new NotFoundError('Không tìm thấy BOM');
     }
-
-    await redis.set(cacheKey, bom, BOM_CACHE_TTL);
 
     return bom;
   }
@@ -291,8 +260,6 @@ class BomService {
         },
       },
     });
-
-    await redis.flushPattern(`bom:list:*`);
 
     logActivity('create', userId, 'bom', {
       recordId: bom.id,
@@ -407,9 +374,6 @@ class BomService {
       },
     });
 
-    await redis.flushPattern(`bom:list:*`);
-    await redis.del(`bom:${id}`);
-
     logActivity('update', userId, 'bom', {
       recordId: id,
       bomCode: updatedBom.bomCode,
@@ -446,9 +410,6 @@ class BomService {
     await prisma.bom.delete({
       where: { id },
     });
-
-    await redis.flushPattern(`bom:list:*`);
-    await redis.del(`bom:${id}`);
 
     logActivity('delete', userId, 'bom', {
       recordId: id,
@@ -503,9 +464,6 @@ class BomService {
         },
       },
     });
-
-    await redis.flushPattern(`bom:list:*`);
-    await redis.del(`bom:${id}`);
 
     logActivity('approve', userId, 'bom', {
       recordId: id,
@@ -691,9 +649,6 @@ class BomService {
         notes: reason ? `${bom.notes || ''}\n[Inactive] ${reason}` : bom.notes,
       },
     });
-
-    await redis.flushPattern(`bom:list:*`);
-    await redis.del(`bom:${id}`);
 
     logActivity('update', userId, 'bom', {
       recordId: id,

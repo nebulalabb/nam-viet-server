@@ -1,76 +1,100 @@
-import { Request, Response, NextFunction } from 'express';
-import taskService from '../services/task.service';
-import { createTaskSchema, updateTaskSchema, queryTasksSchema } from '../validators/task.validator';
-import { AuthRequest } from '@custom-types/common.type';
+import { Response } from 'express';
+import { AuthRequest, ApiResponse } from '@custom-types/common.type';
+import taskService from '@services/task.service';
+import {
+  CreateTaskInput,
+  UpdateTaskInput,
+  TaskQueryInput,
+} from '@validators/task.validator';
 
 class TaskController {
-  async create(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const data = createTaskSchema.parse(req.body);
-      const task = await taskService.create(req.user!.id, data);
-      res.status(201).json({
-        success: true,
-        message: 'Tạo nhiệm vụ thành công',
-        data: task,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // GET /api/tasks - Get all tasks with pagination & filters
+  async getAllTasks(req: AuthRequest, res: Response) {
+    const query = req.query as unknown as TaskQueryInput;
+
+    const result = await taskService.getAllTasks(query);
+
+    const response: ApiResponse = {
+      success: true,
+      data: result.tasks,
+      meta: {
+        page: result.meta.page,
+        limit: result.meta.limit,
+        total: result.meta.total,
+        totalPage: result.meta.totalPages,
+      },
+      message: 'Lấy danh sách nhiệm vụ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async findAll(req: Request, res: Response, next: NextFunction) {
-    try {
-      const query = queryTasksSchema.parse(req.query);
-      const result = await taskService.findAll(query);
-      res.status(200).json({
-        success: true,
-        data: result.tasks,
-        pagination: result.pagination,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // GET /api/tasks/:id - Get task by ID
+  async getTaskById(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+
+    const task = await taskService.getTaskById(id);
+
+    const response: ApiResponse = {
+      success: true,
+      data: task,
+      message: 'Lấy thông tin nhiệm vụ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async findOne(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      const task = await taskService.findOne(id);
-      res.status(200).json({
-        success: true,
-        data: task,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // POST /api/tasks - Create new task
+  async createTask(req: AuthRequest, res: Response) {
+    const data = req.body as CreateTaskInput;
+    const userId = req.user!.id;
+
+    const task = await taskService.createTask(userId, data);
+
+    const response: ApiResponse = {
+      success: true,
+      data: task,
+      message: 'Tạo nhiệm vụ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(201).json(response);
   }
 
-  async update(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      const data = updateTaskSchema.parse(req.body);
-      const task = await taskService.update(id, data);
-      res.status(200).json({
-        success: true,
-        message: 'Cập nhật nhiệm vụ thành công',
-        data: task,
-      });
-    } catch (error) {
-      next(error);
-    }
+  // PUT /api/tasks/:id - Update task
+  async updateTask(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const data = req.body as UpdateTaskInput;
+    const userId = req.user!.id;
+
+    const task = await taskService.updateTask(id, data, userId);
+
+    const response: ApiResponse = {
+      success: true,
+      data: task,
+      message: 'Cập nhật nhiệm vụ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 
-  async delete(req: Request, res: Response, next: NextFunction) {
-    try {
-      const id = parseInt(req.params.id);
-      await taskService.delete(id);
-      res.status(200).json({
-        success: true,
-        message: 'Xóa nhiệm vụ thành công',
-      });
-    } catch (error) {
-      next(error);
-    }
+  // DELETE /api/tasks/:id - Delete task
+  async deleteTask(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const userId = req.user!.id;
+
+    await taskService.deleteTask(id, userId);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Xóa nhiệm vụ thành công!',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
   }
 }
 

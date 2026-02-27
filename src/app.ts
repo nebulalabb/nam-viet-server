@@ -13,7 +13,6 @@ import compressionMiddleware from '@middlewares/compression';
 import { requestTimer } from '@middlewares/logger';
 
 // import { performanceMonitor } from '@utils/performance.monitor';
-import RedisService from '@services/redis.service';
 import uploadService from '@services/upload.service';
 import { setupSwagger } from '@config/swagger';
 import { connectDatabase } from '@config/prisma';
@@ -97,17 +96,7 @@ app.set('json replacer', (_key: string, value: any) => {
   return value;
 });
 
-// Khởi tạo Redis
-const initializeRedis = async () => {
-  try {
-    const redis = RedisService.getInstance();
-    await redis.initialize();
-    console.log('✅ Redis đã kết nối thành công');
-  } catch (error) {
-    console.error('❌ Redis kết nối thất bại:', error);
-    console.log('⚠️  Server sẽ tiếp tục mà không có Redis (vô hiệu hóa cache)');
-  }
-};
+
 
 // Khởi tạo thư mục tải lên
 const initializeUploads = async () => {
@@ -286,8 +275,7 @@ app.listen(PORT, async () => {
   // Initialize database connection
   await connectDatabase();
 
-  // Initialize Redis connection
-  await initializeRedis();
+  // Caching is removed
 
   // Initialize upload directories
   await initializeUploads();

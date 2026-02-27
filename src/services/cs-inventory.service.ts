@@ -1,13 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { NotFoundError, ValidationError } from '@utils/errors';
-import RedisService, { CachePrefix } from './redis.service';
 
 
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const INVENTORY_CACHE_TTL = parseInt(process.env.CACHE_TTL_INVENTORY || '300');
 
 
 class PublicInventoryService {
@@ -104,10 +100,6 @@ class PublicInventoryService {
 
 
     async getProductAvailability(productId: number) {
-        // 1. Thay đổi Cache Key: Dùng prefix khác để không trùng với Admin
-        const cacheKey = `${CachePrefix.INVENTORY}public:product:${productId}`;
-        const cached = await redis.get(cacheKey);
-        if (cached) return cached;
 
         // 2. Chỉ lấy sản phẩm đang Active 
         const product = await prisma.product.findUnique({
@@ -187,8 +179,6 @@ class PublicInventoryService {
                 inStockLocations: stockLocations.filter(l => l.availableQuantity > 0).length
             }
         };
-
-        await redis.set(cacheKey, result, INVENTORY_CACHE_TTL);
 
         return result;
     }

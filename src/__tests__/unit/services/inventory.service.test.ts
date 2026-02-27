@@ -3,7 +3,6 @@ import inventoryService from '@services/inventory.service';
 
 // Mock Prisma
 jest.mock('@prisma/client');
-jest.mock('@services/redis.service');
 
 describe('InventoryService Unit Tests', () => {
   let prisma: any;

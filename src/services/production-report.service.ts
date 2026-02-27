@@ -1,10 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import RedisService from './redis.service';
-
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CACHE_TTL = 300; // 5 minutes
 
 interface ProductionReportFilters {
   startDate: string;
@@ -65,16 +60,6 @@ class ProductionReportService {
   // API 1: DASHBOARD SUMMARY (KPI Cards)
   // =====================================================
   async getProductionSummary(filters: ProductionReportFilters) {
-    const cacheKey = `production:summary:${JSON.stringify(filters)}`;
-    
-    // Try to get from cache (ignore if Redis fails)
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) return cached;
-    } catch (err) {
-      // Silent fail for cache
-    }
-
     const where = this.buildWhereClause(filters);
 
     // Fetch all orders
@@ -138,17 +123,8 @@ class ProductionReportService {
         totalOrders: orders.length,
         onTimeDeliveryRate,
         completedOnTime,
-        totalCompleted: completedOrders.length,
       },
     };
-
-    // Try to cache (ignore if Redis fails)
-    try {
-      await redis.set(cacheKey, result, CACHE_TTL);
-    } catch (err) {
-      // Silent fail for cache
-    }
-    
     return result;
   }
 

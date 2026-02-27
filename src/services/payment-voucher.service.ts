@@ -8,14 +8,8 @@ import {
   PostVoucherInput,
   PaymentVoucherQueryInput,
 } from '@validators/payment-voucher.validator';
-import RedisService from './redis.service';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PAYMENT_VOUCHER_CACHE_TTL = 3600;
-const PAYMENT_VOUCHER_LIST_CACHE_TTL = 600;
 
 class PaymentVoucherService {
   private async generateVoucherCode(): Promise<string> {
@@ -54,16 +48,6 @@ class PaymentVoucherService {
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // Cache key
-    const cacheKey = `payment-voucher:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     // Xử lý approvalStatus
     let approvalStatusWhere: any = {};
@@ -209,22 +193,10 @@ class PaymentVoucherService {
       statistics,
     };
 
-    await redis.set(cacheKey, result, PAYMENT_VOUCHER_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `payment-voucher:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Cache tìm thấy: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`⚠️ Không có cache: ${cacheKey}, đang truy vấn từ database...`);
 
     const voucher = await prisma.paymentVoucher.findUnique({
       where: { id },
@@ -262,8 +234,6 @@ class PaymentVoucherService {
     if (!voucher) {
       throw new NotFoundError('Phiếu chi không tìm thấy');
     }
-
-    await redis.set(cacheKey, voucher, PAYMENT_VOUCHER_CACHE_TTL);
 
     return voucher;
   }
@@ -316,8 +286,6 @@ class PaymentVoucherService {
       voucherCode: voucher.voucherCode,
       amount: data.amount,
     });
-
-    await redis.flushPattern('payment-voucher:list:*');
 
     return voucher;
   }
@@ -384,9 +352,6 @@ class PaymentVoucherService {
       changes: data,
     });
 
-    await redis.del(`payment-voucher:${id}`);
-    await redis.flushPattern('payment-voucher:list:*');
-
     return updatedVoucher;
   }
 
@@ -429,9 +394,6 @@ class PaymentVoucherService {
       action: 'approve_voucher',
       voucherCode: voucher.voucherCode,
     });
-
-    await redis.del(`payment-voucher:${id}`);
-    await redis.flushPattern('payment-voucher:list:*');
 
     return updatedPayment;
   }
@@ -577,10 +539,6 @@ class PaymentVoucherService {
       voucherCode: voucher.voucherCode,
     });
 
-    await redis.del(`payment-voucher:${id}`);
-    await redis.flushPattern('payment-voucher:list:*');
-    await redis.flushPattern('cash-fund:*');
-
     return updatedVoucher;
   }
 
@@ -613,9 +571,6 @@ class PaymentVoucherService {
       recordId: id,
       voucherCode: voucher.voucherCode,
     });
-
-    await redis.del(`payment-voucher:${id}`);
-    await redis.flushPattern('payment-voucher:list:*');
 
     return { message: 'Xóa phiếu chi thành công' };
   }
@@ -663,9 +618,6 @@ class PaymentVoucherService {
       recordId: id,
       voucherCode: voucher.voucherCode,
     });
-
-    await redis.del(`payment-voucher:${id}`);
-    await redis.flushPattern('payment-voucher:list:*');
 
     return updatedVoucher;
   }
@@ -942,14 +894,10 @@ class PaymentVoucherService {
         }
       }
 
-      // Log activity
       logActivity('bulkPost', userId, 'payment_vouchers', {
         count: ids.length,
         ids: ids,
       });
-
-      // Clear cache
-      await redis.flushPattern('payment-voucher:*');
 
       return {
         message: `Ghi sổ ${ids.length} phiếu chi thành công`,
@@ -960,20 +908,6 @@ class PaymentVoucherService {
     return result;
   }
 
-  async refreshCache() {
-    try {
-      // Xóa tất cả payment voucher cache
-      await redis.flushPattern('payment-voucher:*');
-      
-      return {
-        message: 'Cache đã được làm mới',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error('❌ Lỗi khi làm mới cache:', error);
-      throw error;
-    }
-  }
 }
 
 export default new PaymentVoucherService();

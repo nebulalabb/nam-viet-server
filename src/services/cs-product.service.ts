@@ -1,15 +1,11 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError } from '@utils/errors';
-import RedisService from './redis.service';
-import { serializeBigInt } from '@utils/serializer';
 import { PublicProductDto,
    PublicProductDetailDto
 } from '@custom-types/cs-product.type';
 import { PromotionInfo } from '@custom-types/cs-promotion.type';
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
 
-const STORE_CACHE_TTL = 600;
 class StoreProductService {
 
   async getPublicProducts(params: {
@@ -32,9 +28,6 @@ class StoreProductService {
 
 
     const offset = (page - 1) * limit;
-    const cacheKey = `store:products:${JSON.stringify(params)}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) return cached;
 
     const where: Prisma.ProductWhereInput = {
       status: 'active',
@@ -177,15 +170,10 @@ class StoreProductService {
       }
     };
 
-    await redis.set(cacheKey, serializeBigInt(result), STORE_CACHE_TTL);
     return result;
   }
 
   async getProductDetail(slug: string) {
-    const cacheKey = `store:product:detail:${slug}`;
-    // const cached = await redis.get(cacheKey);
-    // if (cached) return cached;
-
     const product = await prisma.product.findUnique({
       where: { slug, status: 'active', productType: { in: ['finished_product', 'goods'] } },
       select: {
@@ -287,7 +275,6 @@ class StoreProductService {
       })),
     };
 
-    await redis.set(cacheKey, serializeBigInt(result), STORE_CACHE_TTL);
     return result;
   }
 

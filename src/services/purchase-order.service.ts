@@ -1,7 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, SendEmailOutLimitError, ValidationError } from '@utils/errors';
 import { logActivity } from '@utils/logger';
-import RedisService from './redis.service';
 import {
   type CreatePurchaseOrderInput,
   type PurchaseOrderQueryInput,
@@ -9,12 +8,8 @@ import {
   type UpdatePurchaseOrderInput,
 } from '@validators/purchase-order.validator';
 import sendPurchaseOrderEmail from './email.service';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PURCHASE_ORDER_CACHE_TTL = parseInt(process.env.PURCHASE_ORDER_CACHE_TTL || '300');
 
 class PurchaseOrderService {
   private async generatePOCode(): Promise<string> {
@@ -52,17 +47,6 @@ class PurchaseOrderService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Cache key
-    const cacheKey = `purchase-order:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cache = await redis.get(cacheKey);
-    if (cache) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cache;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.PurchaseOrderWhereInput = {
       deletedAt: null,
@@ -158,20 +142,10 @@ class PurchaseOrderService {
       message: 'Success',
     };
 
-    await redis.set(cacheKey, result, PURCHASE_ORDER_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `purchase-order:${id}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const [po, t] = await Promise.all([
       prisma.purchaseOrder.findUnique({
@@ -228,8 +202,6 @@ class PurchaseOrderService {
     if (!purchaseOrder) {
       throw new NotFoundError('Purchase Order');
     }
-
-    await redis.set(cacheKey, purchaseOrder, PURCHASE_ORDER_CACHE_TTL);
 
     return purchaseOrder;
   }
@@ -312,9 +284,6 @@ class PurchaseOrderService {
       },
     });
 
-    // Invalidate cache
-    await redis.flushPattern('purchase-order:list:*');
-
     // Log activity
     logActivity('create', userId, 'purchase_orders', {
       recordId: purchaseOrder.id,
@@ -365,10 +334,10 @@ class PurchaseOrderService {
         }
       }
 
-      subTotal = data.details.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+      subTotal = data.details.reduce((sum, item) => new Prisma.Decimal(Number(sum) + Number(item.unitPrice) * item.quantity), new Prisma.Decimal(0));
     }
 
-    const totalAmount = subTotal + (subTotal * data.taxRate) / 100;
+    const totalAmount = new Prisma.Decimal(Number(subTotal) + (Number(subTotal) * data.taxRate) / 100);
 
     // Update purchase order
     const updated = await prisma.$transaction(async (tx) => {
@@ -424,10 +393,6 @@ class PurchaseOrderService {
       });
     });
 
-    // Invalidate cache
-    await redis.del(`purchase-order:${id}`);
-    await redis.flushPattern('purchase-order:list:*');
-
     // Log activity
     logActivity('update', userId, 'purchase_orders', {
       recordId: id,
@@ -478,10 +443,6 @@ class PurchaseOrderService {
       },
     });
 
-    // Invalidate cache
-    await redis.del(`purchase-order:${id}`);
-    await redis.flushPattern('purchase-order:list:*');
-
     // Log activity
     logActivity('update', userId, 'purchase_orders', {
       recordId: id,
@@ -499,7 +460,7 @@ class PurchaseOrderService {
       throw new ValidationError('Đơn đặt hàng phải được phê duyệt.');
     }
 
-    if (purchaseOrder.sendNumber >= 3) {
+    if (purchaseOrder.sendNumber && purchaseOrder.sendNumber >= 3) {
       throw new SendEmailOutLimitError('Không được gửi quá 3 lần email!');
     }
 
@@ -512,7 +473,7 @@ class PurchaseOrderService {
     const updated = await prisma.purchaseOrder.update({
       where: { id },
       data: {
-        sendNumber: purchaseOrder.sendNumber + 1,
+        sendNumber: (purchaseOrder.sendNumber || 0) + 1,
       },
       include: {
         supplier: true,
@@ -538,10 +499,6 @@ class PurchaseOrderService {
         },
       },
     });
-
-    // Invalidate cache
-    await redis.del(`purchase-order:${id}`);
-    await redis.flushPattern('purchase-order:list:*');
 
     logActivity('send email', userId, 'purchase_orders', {
       recordId: id,
@@ -703,9 +660,7 @@ class PurchaseOrderService {
     //   return { purchaseOrder: updatedPO, stockTransaction: approvedTransaction };
     // });
 
-    // // Invalidate cache
-    // await redis.del(`purchase-order:${id}`);
-    // await redis.flushPattern('purchase-order:list:*');
+
 
     // // Log activity
     // logActivity('update', userId, 'purchase_orders', {
@@ -758,10 +713,6 @@ class PurchaseOrderService {
       },
     });
 
-    // Invalidate cache
-    await redis.del(`purchase-order:${id}`);
-    await redis.flushPattern('purchase-order:list:*');
-
     // Log activity
     logActivity('update', userId, 'purchase_orders', {
       recordId: id,
@@ -787,10 +738,6 @@ class PurchaseOrderService {
         deletedAt: new Date(),
       },
     });
-
-    // Invalidate cache
-    await redis.del(`purchase-order:${id}`);
-    await redis.flushPattern('purchase-order:list:*');
 
     // Log activity
     logActivity('delete', userId, 'purchase_orders', {

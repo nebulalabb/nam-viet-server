@@ -10,13 +10,7 @@ import {
   CancelProductionInput,
   ProductionOrderQueryInput,
 } from '@validators/production-order.validator';
-import RedisService from './redis.service';
-
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const PRODUCTION_ORDER_CACHE_TTL = 3600;
-const PRODUCTION_ORDER_LIST_CACHE_TTL = 300;
 
 class ProductionOrderService {
   private async generateOrderCode(): Promise<string> {
@@ -53,18 +47,6 @@ class ProductionOrderService {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const queryString = Object.keys(query).length > 0 ? JSON.stringify(query) : 'default';
-    const cacheKey = `production-order:list:${queryString}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.ProductionOrderWhereInput = {
       ...(status && { status }),
@@ -213,23 +195,10 @@ class ProductionOrderService {
       message: 'Lấy danh sách lệnh sản xuất thành công',
     };
 
-    await redis.set(cacheKey, result, PRODUCTION_ORDER_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `production-order:${id}`;
-
-    const cached = await redis.get(cacheKey);
-
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
-
     const order = await prisma.productionOrder.findUnique({
       where: { id },
       include: {
@@ -370,8 +339,6 @@ class ProductionOrderService {
       shortages,
     };
 
-    await redis.set(cacheKey, responseData, PRODUCTION_ORDER_CACHE_TTL);
-
     return responseData;
   }
 
@@ -476,8 +443,6 @@ class ProductionOrderService {
         };
       }) as any,
     };
-
-    await redis.flushPattern('production-order:list:*');
 
     logActivity('create', userId, 'production_orders', {
       recordId: enrichedProductionOrder.id,
@@ -723,9 +688,6 @@ class ProductionOrderService {
 
       return { order: updatedOrder, stockTransaction };
     });
-
-    await redis.del(`production-order:${id}`);
-    await redis.flushPattern('production-order:list:*');
 
     logActivity('update', userId, 'production_orders', {
       recordId: id,
@@ -980,9 +942,6 @@ class ProductionOrderService {
       return { order: updatedOrder, stockTransaction, totalWastage };
     });
 
-    await redis.del(`production-order:${id}`);
-    await redis.flushPattern('production-order:list:*');
-
     logActivity('update', userId, 'production_orders', {
       recordId: id,
       action: 'complete_production',
@@ -1053,9 +1012,6 @@ class ProductionOrderService {
         },
       },
     });
-
-    await redis.del(`production-order:${id}`);
-    await redis.flushPattern('production-order:list:*');
 
     logActivity('update', userId, 'production_orders', {
       recordId: id,

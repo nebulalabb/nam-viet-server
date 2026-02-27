@@ -1,7 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, ConflictError } from '@utils/errors';
 import { logActivity } from '@utils/logger';
-import RedisService from './redis.service';
 import {
   CreateCustomerInput,
   UpdateCustomerInput,
@@ -9,13 +8,8 @@ import {
   UpdateStatusInput,
   CustomerQueryInput,
 } from '@validators/customer.validator';
-import { sortedQuery } from '@utils/redis';
 
 const prisma = new PrismaClient();
-const redis = RedisService.getInstance();
-
-const CUSTOMER_CACHE_TTL = 3600;
-const CUSTOMER_LIST_CACHE_TTL = 600;
 
 class CustomerService {
   async getAll(query: CustomerQueryInput) {
@@ -36,17 +30,6 @@ class CustomerService {
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const offset = (pageNum - 1) * limitNum;
-
-    // Tạo khóa cache cho nhất quán
-    const cacheKey = `customer:list:${JSON.stringify(sortedQuery(query))}`;
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const where: Prisma.CustomerWhereInput = {
       deletedAt: null,
@@ -162,20 +145,10 @@ class CustomerService {
       },
     };
 
-    await redis.set(cacheKey, result, CUSTOMER_LIST_CACHE_TTL);
-
     return result;
   }
 
   async getById(id: number) {
-    const cacheKey = `customer:${id}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log(`✅ Có cache: ${cacheKey}`);
-      return cached;
-    }
-
-    console.log(`❌ Không có cache: ${cacheKey}, truy vấn database...`);
 
     const customer = await prisma.customer.findUnique({
       where: { id },
@@ -235,8 +208,6 @@ class CustomerService {
           ? Number(customer.creditLimit) - Number(customer.currentDebt)
           : 0,
     };
-
-    await redis.set(cacheKey, customerWithDebtInfo, CUSTOMER_CACHE_TTL);
 
     return customerWithDebtInfo;
   }
@@ -318,8 +289,6 @@ class CustomerService {
       recordId: customer.id,
       customerCode: customer.customerCode,
     });
-
-    await redis.flushPattern('customer:list:*');
 
     return customer;
   }
@@ -407,9 +376,6 @@ class CustomerService {
       changes: data,
     });
 
-    await redis.del(`customer:${id}`);
-    await redis.flushPattern('customer:list:*');
-
     return updatedCustomer;
   }
 
@@ -447,9 +413,6 @@ class CustomerService {
       reason: data.reason,
     });
 
-    await redis.del(`customer:${id}`);
-    await redis.flushPattern('customer:list:*');
-
     return updatedCustomer;
   }
 
@@ -486,9 +449,6 @@ class CustomerService {
       newValue: { status: data.status },
       reason: data.reason,
     });
-
-    await redis.del(`customer:${id}`);
-    await redis.flushPattern('customer:list:*');
 
     return updatedCustomer;
   }
@@ -708,9 +668,6 @@ class CustomerService {
       recordId: id,
       customerCode: customer.customerCode,
     });
-
-    await redis.del(`customer:${id}`);
-    await redis.flushPattern('customer:list:*');
 
     return { message: 'Xóa khách hàng thành công' };
   }

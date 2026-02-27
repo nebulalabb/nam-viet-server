@@ -1,18 +1,29 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { AuthenticationError } from '@utils/errors';
-import RedisService, { CachePrefix } from '@services/redis.service';
 
 /**
  * Custom CSRF Protection Middleware
  *
- * Implements Double Submit Cookie pattern with Redis storage
- * Replaces deprecated csurf package
+ * Implements Double Submit Cookie pattern
+ * Tokens are temporarily stored in memory.
  */
 
-const redis = RedisService.getInstance();
 const CSRF_TOKEN_LENGTH = 32;
 const CSRF_TOKEN_TTL = 60 * 60; // 1 hour
+
+// Memory Map for CSRF tokens
+const csrfTokensMap = new Map<string, { token: string, expiry: number }>();
+
+// Simple cleanup function
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, data] of csrfTokensMap.entries()) {
+    if (now > data.expiry) {
+      csrfTokensMap.delete(key);
+    }
+  }
+}, 60000);
 
 /**
  * Generate CSRF token
@@ -22,14 +33,15 @@ function generateCsrfToken(): string {
 }
 
 /**
- * Store CSRF token in Redis
+ * Store CSRF token in memory Map
  */
 async function storeCsrfToken(token: string, userId?: number): Promise<void> {
-  const key = userId
-    ? `${CachePrefix.SESSION}csrf:user:${userId}`
-    : `${CachePrefix.SESSION}csrf:${token}`;
-
-  await redis.set(key, token, CSRF_TOKEN_TTL);
+  const key = userId ? `csrf:user:${userId}` : `csrf:${token}`;
+  
+  csrfTokensMap.set(key, {
+    token,
+    expiry: Date.now() + CSRF_TOKEN_TTL * 1000
+  });
 }
 
 /**
@@ -38,12 +50,15 @@ async function storeCsrfToken(token: string, userId?: number): Promise<void> {
 async function verifyCsrfToken(token: string, userId?: number): Promise<boolean> {
   if (!token) return false;
 
-  const key = userId
-    ? `${CachePrefix.SESSION}csrf:user:${userId}`
-    : `${CachePrefix.SESSION}csrf:${token}`;
-
-  const storedToken = await redis.get<string>(key);
-  return storedToken === token;
+  const key = userId ? `csrf:user:${userId}` : `csrf:${token}`;
+  
+  const data = csrfTokensMap.get(key);
+  if (!data || Date.now() > data.expiry) {
+    if (data) csrfTokensMap.delete(key);
+    return false;
+  }
+  
+  return data.token === token;
 }
 
 /**
@@ -55,7 +70,7 @@ export async function csrfTokenGenerator(req: Request, res: Response, next: Next
     const token = generateCsrfToken();
     const userId = (req as any).user?.id;
 
-    // Store token in Redis
+    // Store token in memory
     await storeCsrfToken(token, userId);
 
     // Attach token to response
