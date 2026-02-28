@@ -2,8 +2,6 @@ import { Response } from 'express';
 import { AuthRequest } from '@custom-types/common.type';
 import authService from '@services/auth.service';
 import { ApiResponse } from '@custom-types/common.type';
-import { AuthenticationError } from '@utils/errors';
-
 class AuthController {
   // POST /api/auth/login
   async login(req: AuthRequest, res: Response) {
@@ -28,14 +26,6 @@ class AuthController {
 
     const result = await authService.logout(userId, token);
 
-    // Clear refreshToken cookie
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-    });
-
     const response: ApiResponse = {
       success: true,
       data: result,
@@ -45,29 +35,7 @@ class AuthController {
     res.status(200).json(response);
   }
 
-  // POST /api/auth/refresh-token
-  async refreshToken(req: AuthRequest, res: Response) {
-    // Get refreshToken from Cookie (NOT from body)
-    const refreshToken = req.cookies.refreshToken;
 
-    if (!refreshToken) {
-      throw new AuthenticationError('Refresh Token không tìm thấy');
-    }
-
-    const result = await authService.refreshToken(refreshToken);
-
-    // Return new Access Token
-    const response: ApiResponse = {
-      success: true,
-      data: {
-        accessToken: result.accessToken,
-        expiresIn: 15 * 60, // 15 minutes
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.status(200).json(response);
-  }
 
   // PUT /api/auth/change-password
   async changePassword(req: AuthRequest, res: Response) {
@@ -115,8 +83,8 @@ class AuthController {
     res.status(200).json(response);
   }
 
-  // GET /api/auth/me
-  async getMe(req: AuthRequest, res: Response) {
+  // GET /api/auth/authenticated
+  async authenticated(req: AuthRequest, res: Response) {
     const userId = req.user!.id;
 
     const user = await authService.getCurrentUser(userId);
@@ -137,25 +105,10 @@ class AuthController {
 
     const result = await authService.verifyOTPAndLogin(email, code, ipAddress);
 
-    // Set Refresh Token vào HttpOnly Cookie (Backend manages it)
-    res.cookie('refreshToken', result.tokens.refreshToken, {
-      httpOnly: true, // JS không đọc được
-      secure: process.env.NODE_ENV === 'production', // HTTPS only khi production
-      sameSite: 'strict', // Chống CSRF
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/',
-    });
-
-    // Return Response (WITHOUT refreshToken in JSON)
+    // Return the token as string to match crm-template AuthSlice expectation
     const response: ApiResponse = {
       success: true,
-      data: {
-        user: result.user,
-        tokens: {
-          accessToken: result.tokens.accessToken, // Only accessToken
-          expiresIn: result.tokens.expiresIn,
-        },
-      },
+      data: result.token,
       timestamp: new Date().toISOString(),
     };
 

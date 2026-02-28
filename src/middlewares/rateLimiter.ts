@@ -73,7 +73,7 @@ export const globalRateLimiter = rateLimit({
 
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 500, // Increased to 500 from 5 to prevent lockout during dev
   message: 'Quá nhiều lần đăng nhập, vui lòng thử lại sau',
   standardHeaders: true,
   legacyHeaders: false,

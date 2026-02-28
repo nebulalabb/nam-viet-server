@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword } from '@utils/password';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@utils/jwt';
+import { generateAccessToken } from '@utils/jwt';
 import { AuthenticationError, NotFoundError, ValidationError } from '@utils/errors';
 import { JwtPayload } from '@custom-types/common.type';
 import { logActivity } from '@utils/logger';
@@ -101,57 +101,17 @@ class AuthService {
 
   // Logout user
   async logout(userId: number, accessToken: string) {
-    tokenBlacklist.add(accessToken);
+    if (accessToken) {
+      tokenBlacklist.add(accessToken);
+    }
     // Auto cleanup logic could be added here, but for simplicity we rely on JWT maxAge
-
 
     logActivity('logout', userId, 'auth');
 
     return { message: 'Đăng xuất thành công' };
   }
 
-  // Refresh access token
-  async refreshToken(refreshToken: string) {
-    // 1. JWT verification will throw if token is invalid or expired
-    const decoded = verifyRefreshToken(refreshToken);
 
-
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        email: true,
-        employeeCode: true,
-        roleId: true,
-        warehouseId: true,
-        status: true,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundError('Người dùng không tồn tại');
-    }
-
-    if (user.status !== 'active') {
-      throw new AuthenticationError('Tài khoản người dùng không hoạt động');
-    }
-
-    const payload: JwtPayload = {
-      id: user.id,
-      email: user.email,
-      roleId: user.roleId,
-      warehouseId: user.warehouseId || undefined,
-      employeeCode: user.employeeCode,
-    };
-
-    const newAccessToken = generateAccessToken(payload);
-
-    return {
-      accessToken: newAccessToken,
-      expiresIn: 15 * 60,
-    };
-  }
 
   // Change password
   async changePassword(userId: number, oldPassword: string, newPassword: string) {
@@ -326,11 +286,16 @@ class AuthService {
     // Get user permissions (Role + Direct)
     const permissions = await this.getUserPermissions(user.id, user.roleId);
 
+    const mappedPermissions = permissions.map(code => ({ code }));
+
     const { passwordHash, createdBy, updatedBy, ...userWithoutPassword } = user;
 
     return {
       ...userWithoutPassword,
-      permissions,
+      role: {
+        ...userWithoutPassword.role,
+        permissions: mappedPermissions
+      }
     };
   }
 
@@ -532,11 +497,7 @@ class AuthService {
       employeeCode: user.employeeCode,
     };
 
-    const accessToken = generateAccessToken(payload);
-    const refreshToken = generateRefreshToken(payload);
-
-
-    // JWT signature handles the secure validation.
+    const accessToken = generateAccessToken(payload, '7d'); // Changed to 7d to match crm-template
 
     await this.updateLastLogin(user.id);
 
@@ -546,22 +507,21 @@ class AuthService {
       method: '2FA_OTP',
     });
 
-    // Get user permissions (Role + Direct)
     const permissions = await this.getUserPermissions(user.id, user.roleId);
+    const mappedPermissions = permissions.map(code => ({ code }));
 
     // Prepare response
     const { passwordHash, createdBy, updatedBy, ...userWithoutPassword } = user;
 
     return {
+      token: accessToken,
       user: {
         ...userWithoutPassword,
-        permissions,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-        expiresIn: 15 * 60,
-      },
+        role: {
+          ...userWithoutPassword.role,
+          permissions: mappedPermissions
+        }
+      }
     };
   }
 

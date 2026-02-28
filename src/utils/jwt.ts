@@ -8,9 +8,9 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN!;
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN!;
 
 // Generate access token
-export const generateAccessToken = (payload: JwtPayload): string => {
+export const generateAccessToken = (payload: JwtPayload, expiresIn?: string | number): string => {
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN,
+    expiresIn: expiresIn || JWT_EXPIRES_IN,
   });
 };
 

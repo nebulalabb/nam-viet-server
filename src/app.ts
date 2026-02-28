@@ -157,7 +157,7 @@ app.use(
     origin: process.env.CORS_ORIGIN?.split(',') || '*',
     credentials: process.env.CORS_CREDENTIALS === 'true',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-XSRF-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-XSRF-Token', 'ngrok-skip-browser-warning'],
     exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
     maxAge: 600, // 10 phút
   })
@@ -232,7 +232,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/overtime', overtimeRoutes);
 app.use('/api/overtime', overtimeRoutes);
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/notification', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/reports', productionReportRoutes);
@@ -270,15 +270,24 @@ app.use(notFoundHandler);
 // Global error handler
 app.use(errorHandler);
 
+import { createServer } from 'http';
+import { socketManager } from '@config/socket';
+
 // Start server
-app.listen(PORT, async () => {
+const httpServer = createServer(app);
+
+httpServer.listen(PORT, async () => {
   // Initialize database connection
   await connectDatabase();
+
 
   // Caching is removed
 
   // Initialize upload directories
   await initializeUploads();
+
+  // Initialize Socket.io
+  socketManager.init(httpServer);
 
   // Initialize notification scheduler
   if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SCHEDULER === 'true') {

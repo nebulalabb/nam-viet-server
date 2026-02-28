@@ -26,9 +26,9 @@ router.post(
 router.post('/logout', authentication, asyncHandler(authController.logout.bind(authController)));
 
 router.post(
-  '/refresh-token',
-  // validate(refreshTokenSchema),
-  asyncHandler(authController.refreshToken.bind(authController))
+  '/authenticated',
+  authentication,
+  asyncHandler(authController.authenticated.bind(authController))
 );
 
 router.put(
@@ -55,7 +55,7 @@ router.post(
   asyncHandler(authController.resetPassword.bind(authController))
 );
 
-router.get('/me', authentication, asyncHandler(authController.getMe.bind(authController)));
+// removed /me as it is replaced by /authenticated
 
 router.post(
   '/verify-otp',
