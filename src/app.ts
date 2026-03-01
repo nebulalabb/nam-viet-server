@@ -62,6 +62,7 @@ import cs_authRoutes from '@routes/cs-auth.routes';
 import cs_categoryRoutes from '@routes/cs-category.routes';
 import cs_productRoutes from '@routes/cs-product.routes';
 import cs_inventoryRoutes from '@routes/cs-inventory.routes';
+import expiryRoutes from '@routes/expiry.routes';
 import cs_customerRoutes from '@routes/cs-customer.routes';
 import cs_warehouseRoutes from '@routes/cs-warehouse.routes';
 import cs_salesOrderRoutes from '@routes/cs-sales-order.routes';
@@ -234,6 +235,7 @@ app.use('/api/overtime', overtimeRoutes);
 app.use('/api/overtime', overtimeRoutes);
 app.use('/api/notification', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/expiry', expiryRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/reports', productionReportRoutes);
 app.use('/api/performance', performanceRoutes);
@@ -263,6 +265,7 @@ app.use('/api/news-categories', newsCategoryRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/crm/customers', customerRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
