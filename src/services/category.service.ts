@@ -186,14 +186,34 @@ class CategoryService {
   }
 
   async createCategory(data: CreateCategoryInput, createdBy: number) {
-    const codeExists = await this.checkCategoryCodeExists(data.categoryCode);
-    if (codeExists) {
-      throw new ConflictError('Mã danh mục đã tồn tại');
+    const existingCode = await prisma.category.findFirst({
+      where: { categoryCode: data.categoryCode }
+    });
+    if (existingCode) {
+      if (existingCode.deletedAt === null) {
+        throw new ConflictError('Mã danh mục đã tồn tại');
+      } else {
+        // Soft-deleted category exists with this code, rename it to free up the code
+        await prisma.category.update({
+          where: { id: existingCode.id },
+          data: { categoryCode: `${existingCode.categoryCode}-deleted-${Date.now()}` }
+        });
+      }
     }
 
-    const slugExists = await this.checkSlugExists(data.slug);
-    if (slugExists) {
-      throw new ConflictError('Slug đã tồn tại');
+    const existingSlug = await prisma.category.findFirst({
+      where: { slug: data.slug }
+    });
+    if (existingSlug) {
+      if (existingSlug.deletedAt === null) {
+        throw new ConflictError('Slug đã tồn tại');
+      } else {
+        // Soft-deleted category exists with this slug, rename it to free up the slug
+        await prisma.category.update({
+          where: { id: existingSlug.id },
+          data: { slug: `${existingSlug.slug}-deleted-${Date.now()}` }
+        });
+      }
     }
 
     if (data.parentId) {
@@ -251,16 +271,36 @@ class CategoryService {
     }
 
     if (data.categoryCode && data.categoryCode !== existingCategory.categoryCode) {
-      const codeExists = await this.checkCategoryCodeExists(data.categoryCode, id);
-      if (codeExists) {
-        throw new ConflictError('Mã danh mục đã tồn tại');
+      const existingCode = await prisma.category.findFirst({
+        where: { categoryCode: data.categoryCode, id: { not: id } }
+      });
+      if (existingCode) {
+        if (existingCode.deletedAt === null) {
+          throw new ConflictError('Mã danh mục đã tồn tại');
+        } else {
+          // Soft-deleted category exists with this code, rename it to free up the code
+          await prisma.category.update({
+            where: { id: existingCode.id },
+            data: { categoryCode: `${existingCode.categoryCode}-deleted-${Date.now()}` }
+          });
+        }
       }
     }
 
     if (data.slug && data.slug !== existingCategory.slug) {
-      const slugExists = await this.checkSlugExists(data.slug, id);
-      if (slugExists) {
-        throw new ConflictError('Slug đã tồn tại');
+      const existingSlug = await prisma.category.findFirst({
+        where: { slug: data.slug, id: { not: id } }
+      });
+      if (existingSlug) {
+        if (existingSlug.deletedAt === null) {
+          throw new ConflictError('Slug đã tồn tại');
+        } else {
+          // Soft-deleted category exists with this slug, rename it to free up the slug
+          await prisma.category.update({
+            where: { id: existingSlug.id },
+            data: { slug: `${existingSlug.slug}-deleted-${Date.now()}` }
+          });
+        }
       }
     }
 
@@ -532,18 +572,38 @@ class CategoryService {
           continue;
         }
 
-        const existingCode = await this.checkCategoryCodeExists(categoryCode);
+        const existingCode = await prisma.category.findFirst({
+          where: { categoryCode }
+        });
         if (existingCode) {
-          errors.push(`Dòng ${rowNum}: Mã danh mục ${categoryCode} đã tồn tại`);
-          errorCount++;
-          continue;
+          if (existingCode.deletedAt === null) {
+            errors.push(`Dòng ${rowNum}: Mã danh mục ${categoryCode} đã tồn tại`);
+            errorCount++;
+            continue;
+          } else {
+            // Rename to free code
+            await prisma.category.update({
+              where: { id: existingCode.id },
+              data: { categoryCode: `${existingCode.categoryCode}-deleted-${Date.now()}` }
+            });
+          }
         }
 
-        const existingSlug = await this.checkSlugExists(slug);
+        const existingSlug = await prisma.category.findFirst({
+          where: { slug }
+        });
         if (existingSlug) {
-          errors.push(`Dòng ${rowNum}: Đường dẫn ${slug} đã tồn tại`);
-          errorCount++;
-          continue;
+          if (existingSlug.deletedAt === null) {
+            errors.push(`Dòng ${rowNum}: Đường dẫn ${slug} đã tồn tại`);
+            errorCount++;
+            continue;
+          } else {
+            // Rename to free slug
+            await prisma.category.update({
+              where: { id: existingSlug.id },
+              data: { slug: `${existingSlug.slug}-deleted-${Date.now()}` }
+            });
+          }
         }
 
         let parentId = null;
