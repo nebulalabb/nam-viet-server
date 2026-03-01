@@ -44,7 +44,7 @@ async function main() {
 
     await prisma.crmTask.deleteMany({});
     await prisma.ticket.deleteMany({});
-    
+
     await prisma.customer.deleteMany({});
     console.log('   ✓ Deleted Customers');
 
@@ -79,7 +79,7 @@ async function main() {
     await prisma.cashFund.deleteMany({});
     await prisma.delivery.deleteMany({});
     await prisma.generalSetting.deleteMany({});
-    
+
     await prisma.user.deleteMany({});
     console.log('   ✓ Deleted Users');
 
@@ -257,7 +257,7 @@ async function main() {
     { key: "DELETE_CUSTOMER_CARE", name: "Xóa CSKH", module: "crm" },
     { key: "UPDATE_CUSTOMER_CARE_STATUS", name: "Sửa trạng thái CSKH", module: "crm" },
     { key: "CRM_MANAGEMENT", name: "Quản lý CRM", module: "crm" },
-    
+
     { key: "TASK_MANAGEMENT", name: "Quản lý nhiệm vụ", module: "task" },
     { key: "GET_TASK", name: "Xem nhiệm vụ", module: "task" },
     { key: "CREATE_TASK", name: "Thêm nhiệm vụ", module: "task" },
@@ -350,7 +350,7 @@ async function main() {
     { key: "UPDATE_PAYMENT_VOUCHER", name: "Sửa phiếu chi", module: "payment" },
     { key: "DELETE_PAYMENT_VOUCHER", name: "Xóa phiếu chi", module: "payment" },
     { key: "COMPLETE_PAYMENT_VOUCHER", name: "Hoàn thành phiếu chi", module: "payment" },
-    
+
     // Payment
     { key: "PAYMENT_VIEW_ALL", name: "Xem tất cả phiếu chi", module: "payment" },
     { key: "PAYMENT_VIEW_OWN", name: "Xem phiếu chi của tôi", module: "payment" },
@@ -378,7 +378,7 @@ async function main() {
     { key: "DELETE_WARRANTY", name: "Xóa bảo hành", module: "warranty" },
     { key: "REMIND_WARRANTY", name: "Nhắc nhở bảo hành", module: "warranty" },
     { key: "UPDATE_WARRANTY_STATUS", name: "Sửa trạng thái bảo hành", module: "warranty" },
-    
+
     { key: "EXPIRY_MANAGEMENT", name: "Quản lý HSD", module: "expiry" },
     { key: "GET_EXPIRY", name: "Xem HSD", module: "expiry" },
     { key: "GET_EXPIRY_USER", name: "Xem HSD của tôi", module: "expiry" },
@@ -468,7 +468,7 @@ async function main() {
     { key: "SYSTEM_SETTING", name: "Cài đặt hệ thống", module: "setting" },
     { key: "SESSION_SETTING", name: "Cài đặt phiên bản", module: "setting" },
     { key: "GET_STORAGE_SIZE_SETTING", name: "Xem dung lượng lưu trữ", module: "setting" },
-    
+
     // Khác
     { key: "PRODUCTS_MANAGEMENT", name: "Quản lý sản phẩm", module: "product" },
     { key: "GET_PERMISSION", name: "Xem quyền", module: "permission" },
@@ -568,7 +568,7 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: 'nhoangkha03@gmail.com' }, { employeeCode: 'NV-00010' }],
+      OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
   });
 
@@ -576,7 +576,7 @@ async function main() {
     adminUser = await prisma.user.create({
       data: {
         employeeCode: 'NV-00010',
-        email: 'nhoangkha03@gmail.com',
+        email: 'lyvanquy2020@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',
