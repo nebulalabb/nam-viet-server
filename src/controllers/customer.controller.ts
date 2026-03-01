@@ -19,8 +19,7 @@ class CustomerController {
     res.status(200).json({
       success: true,
       data: result.data,
-      meta: result.meta,
-      cards: result.cards,
+      pagination: result.meta,
       timestamp: new Date().toISOString(),
     });
   }

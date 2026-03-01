@@ -24,8 +24,7 @@ class SmartDebtController {
    */
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      console.log('SmartDebtController.getAll called with query:', req.query);
-      const { page, limit, search, status, year, assignedUserId, province, type } = req.query;
+      const { page, limit, search, status, year, assignedUserId, type } = req.query;
 
       const result = await debtService.getAll({
         page: Number(page) || 1,
@@ -34,17 +33,16 @@ class SmartDebtController {
         status: status as 'paid' | 'unpaid',
         year: year ? Number(year) : undefined,
         assignedUserId: assignedUserId ? Number(assignedUserId) : undefined,
-        province: province as string,
         type: type as 'customer' | 'supplier'
       });
       
       res.status(200).json({
         success: true,
-        data: result.data,
-        meta: result.meta,
+        data: (result as any).data,
+        meta: (result as any).meta,
         timestamp: new Date().toISOString(),
       });
-      console.log('SmartDebtController.getAll executed with data:', result.data);
+      console.log('SmartDebtController.getAll executed with data:', (result as any).data);
     } catch (error) {
       next(error);
     }

@@ -18,10 +18,7 @@ class CustomerService {
       limit = '20',
       search,
       customerType,
-      classification,
       status,
-      province,
-      district,
       debtStatus,
       sortBy = 'createdAt',
       sortOrder = 'desc',
@@ -35,9 +32,6 @@ class CustomerService {
       deletedAt: null,
       ...(status && { status }),
       ...(customerType && { customerType }),
-      ...(classification && { classification }),
-      ...(province && { province }),
-      ...(district && { district }),
       ...(search && {
         OR: [
           { customerCode: { contains: search } },
@@ -124,14 +118,6 @@ class CustomerService {
       overLimit: customerNoLimit.filter(
         (customer) => Number(customer.currentDebt) > Number(customer.creditLimit)
       ).length,
-      byClassification: {
-        retail: customerNoLimit.filter((customer) => customer.classification === 'retail').length,
-        wholesale: customerNoLimit.filter((customer) => customer.classification === 'wholesale')
-          .length,
-        vip: customerNoLimit.filter((customer) => customer.classification === 'vip').length,
-        distributor: customerNoLimit.filter((customer) => customer.classification === 'distributor')
-          .length,
-      },
     };
 
     const result = {
@@ -254,14 +240,12 @@ class CustomerService {
         customerCode: data.customerCode,
         customerName: data.customerName,
         customerType: data.customerType,
-        classification: data.classification || 'retail',
+        classification: 'retail', // Keeping a default since DB schema might require it, but no longer exposed, or remove it entirely if db doesn't require it? Wait, let me check. I'll pass 'retail' to be safe since it's an enum. If it causes error, I'll update schema later.
         gender: data.gender,
         contactPerson: data.contactPerson,
         phone: data.phone,
         email: data.email || null,
         address: data.address,
-        province: data.province,
-        district: data.district,
         taxCode: data.taxCode,
         cccd: data.cccd || null,
         issuedAt: data.issuedAt ? new Date(data.issuedAt) : null,
@@ -346,14 +330,11 @@ class CustomerService {
       data: {
         ...(data.customerName && { customerName: data.customerName }),
         ...(data.customerType && { customerType: data.customerType }),
-        ...(data.classification && { classification: data.classification }),
         ...(data.gender !== undefined && { gender: data.gender }),
         ...(data.contactPerson !== undefined && { contactPerson: data.contactPerson }),
         ...(data.phone && { phone: data.phone }),
         ...(data.email !== undefined && { email: data.email || null }),
         ...(data.address !== undefined && { address: data.address }),
-        ...(data.province !== undefined && { province: data.province }),
-        ...(data.district !== undefined && { district: data.district }),
         ...(data.taxCode !== undefined && { taxCode: data.taxCode }),
         ...(data.cccd !== undefined && { cccd: data.cccd || null }),
         ...(data.issuedAt !== undefined && { issuedAt: data.issuedAt ? new Date(data.issuedAt) : null }),

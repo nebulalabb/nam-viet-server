@@ -6,39 +6,99 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...\n');
 
-  // // =====================================================
-  // // 0. CLEAN DATABASE (Delete existing data)
-  // // =====================================================
-  // console.log('🗑️  Cleaning database...\n');
+  // =====================================================
+  // 0. CLEAN DATABASE (Delete existing data)
+  // =====================================================
+  console.log('🗑️  Cleaning database...\n');
 
-  // try {
-  //   // Delete in correct order to respect foreign key constraints
-  //   await prisma.rolePermission.deleteMany({});
-  //   console.log('   ✓ Deleted RolePermissions');
+  try {
+    // Delete in correct order to respect foreign key constraints
+    await prisma.customerAccount.deleteMany({});
+    console.log('   ✓ Deleted CustomerAccounts');
 
-  //   await prisma.user.deleteMany({});
-  //   console.log('   ✓ Deleted Users');
+    await prisma.activityLog.deleteMany({});
+    console.log('   ✓ Deleted ActivityLogs');
 
-  //   await prisma.warehouse.deleteMany({});
-  //   console.log('   ✓ Deleted Warehouses');
+    await prisma.verificationCode.deleteMany({});
+    console.log('   ✓ Deleted VerificationCodes');
 
-  //   await prisma.supplier.deleteMany({});
-  //   console.log('   ✓ Deleted Suppliers');
+    await prisma.rolePermission.deleteMany({});
+    console.log('   ✓ Deleted RolePermissions');
 
-  //   await prisma.category.deleteMany({});
-  //   console.log('   ✓ Deleted Categories');
+    // Need to remove relations from warehouse & customers to user first if any strict FKs exist
+    // Prisma deleteMany will fail if other tables reference User. Let's delete dependent tables first
+    await prisma.stockTransferDetail.deleteMany({});
+    await prisma.stockTransfer.deleteMany({});
+    await prisma.stockTransactionDetail.deleteMany({});
+    await prisma.stockTransaction.deleteMany({});
+    await prisma.productionOrderMaterial.deleteMany({});
+    await prisma.productionOrder.deleteMany({});
+    await prisma.bomMaterial.deleteMany({});
+    await prisma.bom.deleteMany({});
+    await prisma.salesOrderDetail.deleteMany({});
+    await prisma.salesOrder.deleteMany({});
+    await prisma.purchaseOrderDetail.deleteMany({});
+    await prisma.purchaseOrder.deleteMany({});
+    await prisma.paymentVoucher.deleteMany({});
+    await prisma.paymentReceipt.deleteMany({});
 
-  //   await prisma.permission.deleteMany({});
-  //   console.log('   ✓ Deleted Permissions');
+    await prisma.crmTask.deleteMany({});
+    await prisma.ticket.deleteMany({});
+    
+    await prisma.customer.deleteMany({});
+    console.log('   ✓ Deleted Customers');
 
-  //   await prisma.role.deleteMany({});
-  //   console.log('   ✓ Deleted Roles');
+    await prisma.supplier.deleteMany({});
+    console.log('   ✓ Deleted Suppliers');
 
-  //   console.log('\n✅ Database cleaned successfully!\n');
-  // } catch (error) {
-  //   console.error('⚠️  Error cleaning database:', error);
-  //   console.log('   Continuing with seed process...\n');
-  // }
+    await prisma.promotionProduct.deleteMany({});
+    await prisma.productImage.deleteMany({});
+    await prisma.productVideo.deleteMany({});
+    await prisma.inventory.deleteMany({});
+    await prisma.product.deleteMany({});
+    console.log('   ✓ Deleted Products');
+
+    await prisma.warehouse.deleteMany({});
+    console.log('   ✓ Deleted Warehouses');
+
+    await prisma.newsTagRelation.deleteMany({});
+    await prisma.newsTag.deleteMany({});
+    await prisma.news.deleteMany({});
+    await prisma.newsCategory.deleteMany({});
+    await prisma.attendanceQRLog.deleteMany({});
+    await prisma.attendanceQRCode.deleteMany({});
+    await prisma.loginHistory.deleteMany({});
+    await prisma.userPermission.deleteMany({});
+    await prisma.notification.deleteMany({});
+    await prisma.overtimeEntry.deleteMany({});
+    await prisma.overtimeSession.deleteMany({});
+    await prisma.salary.deleteMany({});
+    await prisma.attendance.deleteMany({});
+    await prisma.attendanceMonth.deleteMany({});
+    await prisma.promotion.deleteMany({});
+    await prisma.cashFund.deleteMany({});
+    await prisma.delivery.deleteMany({});
+    await prisma.generalSetting.deleteMany({});
+    
+    await prisma.user.deleteMany({});
+    console.log('   ✓ Deleted Users');
+
+    await prisma.category.deleteMany({});
+    console.log('   ✓ Deleted Categories');
+
+    await prisma.permission.deleteMany({});
+    console.log('   ✓ Deleted Permissions');
+
+    await prisma.role.deleteMany({});
+    console.log('   ✓ Deleted Roles');
+
+
+
+    console.log('\n✅ Database cleaned successfully!\n');
+  } catch (error) {
+    console.error('⚠️  Error cleaning database:', error);
+    console.log('   Continuing with seed process...\n');
+  }
 
   // =====================================================
   // 1. SEED ROLES

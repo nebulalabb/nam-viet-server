@@ -148,8 +148,6 @@ class CustomerService {
             ...(data.gender !== undefined && { gender: data.gender }),
             ...(data.contactPerson !== undefined && { contactPerson: data.contactPerson }),
             ...(data.address !== undefined && { address: data.address }),
-            ...(data.province !== undefined && { province: data.province }),
-            ...(data.district !== undefined && { district: data.district }),
 
             // Cập nhật CCCD
             ...(data.cccd && { cccd: data.cccd }),

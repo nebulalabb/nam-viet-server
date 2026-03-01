@@ -12,7 +12,6 @@ export interface DebtQueryParams {
   status?: 'paid' | 'unpaid';
 
   assignedUserId?: number; // Lọc theo nhân viên phụ trách
-  province?: string;       // Lọc theo tỉnh (chỉ áp dụng cho KH)
   type?: 'customer' | 'supplier';
 }
 
@@ -62,7 +61,7 @@ class SmartDebtService {
   // =========================================================================
   async getAll(params: DebtQueryParams) {
 
-    const { page = 1, limit = 20, search, status, year, assignedUserId, province, type } = params;
+    const { page = 1, limit = 20, search, status, year, assignedUserId, type } = params;
     const skip = (Number(page) - 1) * Number(limit);
     const targetYearStr = year ? String(year) : String(new Date().getFullYear());
 
@@ -84,9 +83,6 @@ class SmartDebtService {
           { phone: { contains: search } }
         ];
       }
-      // ✅ Khách hàng: Lọc theo cột province
-      if (province) where.province = { contains: province };
-
       if (assignedUserId) where.assignedUserId = Number(assignedUserId);
 
       if (status) {
@@ -132,9 +128,6 @@ class SmartDebtService {
         ];
       }
 
-      // ✅ NCC: Lọc theo cột address (Vì NCC không có cột province riêng)
-      if (province) where.address = { contains: province };
-
       if (assignedUserId) where.assignedUserId = Number(assignedUserId);
 
       if (status) {
@@ -175,10 +168,8 @@ class SmartDebtService {
         customerWhere.OR = [
           { customerName: { contains: search } },
           { customerCode: { contains: search } },
-          { phone: { contains: search } }
         ];
       }
-      if (province) customerWhere.province = { contains: province };
       if (assignedUserId) customerWhere.assignedUserId = Number(assignedUserId);
 
       // 2. Tạo điều kiện lọc cho Nhà cung cấp
@@ -187,10 +178,8 @@ class SmartDebtService {
         supplierWhere.OR = [
           { supplierName: { contains: search } },
           { supplierCode: { contains: search } },
-          { phone: { contains: search } }
         ];
       }
-      if (province) supplierWhere.address = { contains: province };
       if (assignedUserId) supplierWhere.assignedUserId = Number(assignedUserId);
 
       // 3. Query song song cả 2 bảng
@@ -311,9 +300,7 @@ class SmartDebtService {
       code: type === 'customer' ? obj.customerCode : obj.supplierCode,
       name: type === 'customer' ? obj.customerName : obj.supplierName,
       phone: obj.phone,
-      location: type === 'customer'
-        ? [obj.district, obj.province].filter(Boolean).join(', ')
-        : obj.address, // NCC dùng address
+      location: obj.address,
       avatar: type === 'customer' ? obj.avatarUrl : null,
       assignedUser: obj.assignedUser,
 
@@ -370,9 +357,6 @@ class SmartDebtService {
         email: customer.email,
         avatar: customer.avatarUrl,
         type: 'customer',
-        assignedUser: customer.assignedUser,
-        province: customer.province,
-        district: customer.district
       };
 
       debtPeriod = await prisma.debtPeriod.findUnique({
@@ -1456,7 +1440,7 @@ class SmartDebtService {
 
         // Địa chỉ: Khách (Huyện, Tỉnh), NCC (Address full)
         location: isCustomer
-          ? [item.district, item.province].filter(Boolean).join(', ')
+          ? item.address
           : item.address,
 
         // Phân loại: Khách (Nhóm khách), NCC (Mặc định là 'NCC')

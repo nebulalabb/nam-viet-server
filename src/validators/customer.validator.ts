@@ -10,9 +10,6 @@ export const createCustomerSchema = z.object({
     .min(1, 'Tên khách hàng không được để trống')
     .max(200, 'Tên khách hàng tối đa 200 ký tự'),
   customerType: z.enum(['individual', 'company'], { message: 'Loại khách hàng không hợp lệ' }),
-  classification: z
-    .enum(['retail', 'wholesale', 'vip', 'distributor'], { message: 'Phân loại không hợp lệ' })
-    .optional(),
   gender: z.enum(['male', 'female', 'other'], { message: 'Giới tính không hợp lệ' }).optional(),
   contactPerson: z.string().max(100, 'Người liên hệ tối đa 100 ký tự').optional(),
   phone: z
@@ -27,11 +24,9 @@ export const createCustomerSchema = z.object({
     .optional()
     .or(z.literal('')),
   address: z.string().max(255, 'Địa chỉ tối đa 255 ký tự').optional(),
-  province: z.string().max(100, 'Tỉnh/Thành phố tối đa 100 ký tự').optional(),
-  district: z.string().max(100, 'Quận/Huyện tối đa 100 ký tự').optional(),
   taxCode: z.string().max(50, 'Mã số thuế tối đa 50 ký tự').optional(),
   cccd: z.string().max(20, 'CCCD không được quá 20 ký tự').optional().or(z.literal('')),
-  issuedAt: z.string().optional(),
+  issuedAt: z.string().nullable().optional(),
   issuedBy: z.string().max(100, 'Nơi cấp không được quá 100 ký tự').optional().or(z.literal('')),
   creditLimit: z.number().min(0, 'Hạn mức tín dụng phải lớn hơn hoặc bằng 0').optional(),
   rewardPoints: z.number().int().min(0, 'Điểm thưởng phải lớn hơn hoặc bằng 0').optional(),
@@ -48,9 +43,6 @@ export const updateCustomerSchema = z.object({
   customerType: z
     .enum(['individual', 'company'], { message: 'Loại khách hàng không hợp lệ' })
     .optional(),
-  classification: z
-    .enum(['retail', 'wholesale', 'vip', 'distributor'], { message: 'Phân loại không hợp lệ' })
-    .optional(),
   gender: z.enum(['male', 'female', 'other'], { message: 'Giới tính không hợp lệ' }).optional(),
   contactPerson: z.string().max(100, 'Người liên hệ tối đa 100 ký tự').optional(),
   phone: z
@@ -66,11 +58,9 @@ export const updateCustomerSchema = z.object({
     .optional()
     .or(z.literal('')),
   address: z.string().max(255, 'Địa chỉ tối đa 255 ký tự').optional(),
-  province: z.string().max(100, 'Tỉnh/Thành phố tối đa 100 ký tự').optional(),
-  district: z.string().max(100, 'Quận/Huyện tối đa 100 ký tự').optional(),
   taxCode: z.string().max(50, 'Mã số thuế tối đa 50 ký tự').optional(),
   cccd: z.string().max(20, 'CCCD không được quá 20 ký tự').optional().or(z.literal('')),
-  issuedAt: z.string().optional(),
+  issuedAt: z.string().nullable().optional(),
   issuedBy: z.string().max(100, 'Nơi cấp không được quá 100 ký tự').optional().or(z.literal('')),
   creditLimit: z.number().min(0, 'Hạn mức tín dụng phải lớn hơn hoặc bằng 0').optional(),
   rewardPoints: z.number().int().min(0, 'Điểm thưởng phải lớn hơn hoặc bằng 0').optional(),
@@ -99,14 +89,9 @@ export const queryCustomersSchema = z.object({
   customerType: z
     .enum(['individual', 'company'], { message: 'Loại khách hàng không hợp lệ' })
     .optional(),
-  classification: z
-    .enum(['retail', 'wholesale', 'vip', 'distributor'], { message: 'Phân loại không hợp lệ' })
-    .optional(),
   status: z
     .enum(['active', 'inactive', 'blacklisted'], { message: 'Trạng thái không hợp lệ' })
     .optional(),
-  province: z.string().optional(),
-  district: z.string().optional(),
   debtStatus: z
     .enum(['with-debt', 'no-debt', 'over-limit'], {
       message: 'Trạng thái khách hàng khóa tín dụng không hợp lệ',

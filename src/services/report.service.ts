@@ -848,23 +848,23 @@ class ReportService {
       include: {
         customer: {
           select: {
-            province: true,
+            address: true,
           },
         },
       },
     });
 
     const grouped = orders.reduce((acc, order) => {
-      const province = order.customer.province || 'Unknown';
-      if (!acc[province]) {
-        acc[province] = {
-          province,
+      const location = order.customer.address || 'Unknown';
+      if (!acc[location]) {
+        acc[location] = {
+          province: location,
           revenue: 0,
           orderCount: 0,
         };
       }
-      acc[province].revenue += Number(order.totalAmount);
-      acc[province].orderCount += 1;
+      acc[location].revenue += Number(order.totalAmount);
+      acc[location].orderCount += 1;
       return acc;
     }, {} as Record<string, { province: string; revenue: number; orderCount: number }>);
 
