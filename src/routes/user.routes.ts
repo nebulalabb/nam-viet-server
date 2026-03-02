@@ -118,6 +118,7 @@ router.get(
 // GET /api/users/:id/permissions - Get user's direct permissions
 router.get(
   '/:id/permissions',
+  authorize('USER_MANAGEMENT'),
   authorize('GET_USER'),
   asyncHandler(userPermissionController.getUserPermissions.bind(userPermissionController))
 );
@@ -125,6 +126,7 @@ router.get(
 // POST /api/users/:id/permissions - Assign permission to user
 router.post(
   '/:id/permissions',
+  authorize('USER_MANAGEMENT'),
   authorize('UPDATE_USER'),
   asyncHandler(userPermissionController.assignUserPermission.bind(userPermissionController))
 );
@@ -132,6 +134,7 @@ router.post(
 // DELETE /api/users/:id/permissions/:permissionId - Revoke permission from user
 router.delete(
   '/:id/permissions/:permissionId',
+  authorize('USER_MANAGEMENT'),
   authorize('UPDATE_USER'),
   asyncHandler(userPermissionController.revokeUserPermission.bind(userPermissionController))
 );
@@ -139,6 +142,7 @@ router.delete(
 // GET /api/users/:id/permissions/effective - Get effective permissions
 router.get(
   '/:id/permissions/effective',
+  authorize('USER_MANAGEMENT'),
   authorize('GET_USER'),
   asyncHandler(userPermissionController.getEffectivePermissions.bind(userPermissionController))
 );

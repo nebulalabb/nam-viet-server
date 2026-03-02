@@ -241,6 +241,13 @@ async function main() {
     { key: "UPDATE_PRODUCT", name: "Sửa sản phẩm", module: "product" },
     { key: "DELETE_PRODUCT", name: "Xóa sản phẩm", module: "product" },
 
+    //Quản lý khuyến mãi
+    { key: "PROMOTION_MANAGEMENT", name: "Quản lý khuyến mãi", module: "promotion" },
+    { key: "GET_PROMOTION", name: "Xem khuyến mãi", module: "promotion" },
+    { key: "CREATE_PROMOTION", name: "Thêm khuyến mãi", module: "promotion" },
+    { key: "UPDATE_PROMOTION", name: "Sửa khuyến mãi", module: "promotion" },
+    { key: "DELETE_PROMOTION", name: "Xóa khuyến mãi", module: "promotion" },
+
     // Quản lý khách hàng
     { key: "CUSTOMER_MANAGEMENT", name: "Quản lý khách hàng", module: "customer" },
     { key: "GET_CUSTOMER", name: "Xem khách hàng", module: "customer" },
@@ -578,6 +585,7 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
+      OR: [{ email: 'linhlyhai56@gmail.com' }, { employeeCode: 'NV-00010' }],
       OR: [{ email: 'khangthiquy@gmail.com' }, { employeeCode: 'NV-00010' }],
       OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
@@ -587,6 +595,7 @@ async function main() {
     adminUser = await prisma.user.create({
       data: {
         employeeCode: 'NV-00010',
+        email: 'linhlyhai56@gmail.com',
         email: 'leeminhkang@gmail.com',
         email: 'lyvanquy2020@gmail.com',
         passwordHash: hashedPassword,
