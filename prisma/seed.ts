@@ -393,6 +393,16 @@ async function main() {
     { key: "UPDATE_EXPIRY", name: "Sửa HSD", module: "expiry" },
     { key: "DELETE_EXPIRY", name: "Xóa HSD", module: "expiry" },
 
+    // Công nợ 
+    // Quản lý công nợ (Smart Debt)
+    { key: "DEBT_MANAGEMENT", name: "Quản lý công nợ", module: "debt" },
+    { key: "VIEW_DEBT_RECONCILIATION", name: "Xem công nợ / Đối chiếu", module: "debt" },
+    { key: "CREATE_DEBT_RECONCILIATION", name: "Đồng bộ / Tạo chốt công nợ", module: "debt" },
+    { key: "UPDATE_DEBT_RECONCILIATION", name: "Cập nhật chốt công nợ", module: "debt" },
+    { key: "DELETE_DEBT_RECONCILIATION", name: "Xóa chốt công nợ", module: "debt" },
+    { key: "SEND_DEBT_RECONCILIATION_EMAIL", name: "Gửi email đối chiếu công nợ", module: "debt" },
+    { key: "EXPORT_DEBT_RECONCILIATION", name: "Xuất file công nợ (PDF/Excel)", module: "debt" },
+
     // Kho
     { key: "WAREHOUSE_MANAGEMENT", name: "Quản lý kho", module: "warehouse" },
     { key: "STOCK_MANAGEMENT", name: "Quản lý tồn kho", module: "stock" },
@@ -576,6 +586,8 @@ async function main() {
   let adminUser = await prisma.user.findFirst({
     where: {
       OR: [{ email: 'linhlyhai56@gmail.com' }, { employeeCode: 'NV-00010' }],
+      OR: [{ email: 'khangthiquy@gmail.com' }, { employeeCode: 'NV-00010' }],
+      OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
   });
 
@@ -584,6 +596,8 @@ async function main() {
       data: {
         employeeCode: 'NV-00010',
         email: 'linhlyhai56@gmail.com',
+        email: 'leeminhkang@gmail.com',
+        email: 'lyvanquy2020@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',

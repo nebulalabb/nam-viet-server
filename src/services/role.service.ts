@@ -52,6 +52,18 @@ class RoleService {
           status: true,
           createdAt: true,
           updatedAt: true,
+          rolePermissions: {
+            select: {
+              permission: {
+                select: {
+                  id: true,
+                  permissionKey: true,
+                  permissionName: true,
+                  module: true,
+                },
+              },
+            },
+          },
           _count: {
             select: {
               users: true,
@@ -63,8 +75,16 @@ class RoleService {
       prisma.role.count({ where }),
     ]);
 
+    const mappedRoles = roles.map(role => {
+      const { rolePermissions, ...rest } = role;
+      return {
+        ...rest,
+        permissions: rolePermissions.map(rp => rp.permission)
+      };
+    });
+
     const result = {
-      data: roles,
+      data: mappedRoles,
       meta: {
         page: pageNum,
         limit: limitNum,

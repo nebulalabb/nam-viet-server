@@ -184,6 +184,9 @@ model User {
   createdTickets          Ticket[]           @relation("TicketCreator")
   assignedTasks           CrmTask[]          @relation("TaskAssignee")
   createdTasks            CrmTask[]          @relation("TaskCreator")
+  expiries                Expiry[]           @relation("ExpiryUser")
+  createdExpiries         Expiry[]           @relation("ExpiryCreator")
+  updatedExpiries         Expiry[]           @relation("ExpiryUpdater")
 
   @@index([roleId, status])
   @@map("users")
@@ -402,6 +405,7 @@ model Product {
   salesOrderDetails        SalesOrderDetail[]
   promotionProducts        PromotionProduct[]
   promotionGifts           PromotionProduct[]        @relation("GiftProduct")
+  expiries                 Expiry[]
 
   @@index([sku])
   @@index([categoryId])
@@ -737,6 +741,7 @@ model Customer {
   customerAccount CustomerAccount?
   tickets         Ticket[]
   crmTasks        CrmTask[]
+  expiryAccounts  CustomerExpiryAccount[]
 
   @@index([customerCode])
   @@index([phone])
@@ -776,6 +781,53 @@ model CustomerAccount {
 // 5. SALES MANAGEMENT
 // =====================================================
 
+model CustomerExpiryAccount {
+  id               Int       @id @default(autoincrement())
+  customerId       Int       @map("customer_id")
+  accountName      String    @map("account_name") @db.VarChar(255)
+  accountCreatedAt DateTime? @map("account_created_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiries Expiry[]
+
+  @@index([customerId])
+  @@index([accountName])
+  @@map("customer_expiry_accounts")
+}
+
+model Expiry {
+  id            Int       @id @default(autoincrement())
+  accountId     Int       @map("account_id")
+  startDate     DateTime  @map("start_date")
+  endDate       DateTime  @map("end_date")
+  category      String?   @db.VarChar(100)
+  invoiceId     Int?      @map("invoice_id")
+  productId     Int?      @map("product_id")
+  alertDateStep Int?      @default(30) @map("alert_date_step")
+  options       Json?
+  note          String?   @db.VarChar(500)
+  userId        Int?      @map("user_id")
+  createdBy     Int?      @map("created_by")
+  updatedBy     Int?      @map("updated_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  account CustomerExpiryAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  product Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  invoice SalesOrder?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  user    User?                 @relation("ExpiryUser", fields: [userId], references: [id], onDelete: SetNull)
+  creator User?                 @relation("ExpiryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  updater User?                 @relation("ExpiryUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([endDate])
+  @@map("expiries")
+}
+
 model SalesOrder {
   id              Int           @id @default(autoincrement())
   orderCode       String        @unique @map("order_code") @db.VarChar(50)
@@ -812,6 +864,7 @@ model SalesOrder {
   details         SalesOrderDetail[]
   deliveries      Delivery[]
   paymentReceipts PaymentReceipt[]
+  expiries        Expiry[]
 
   @@index([orderCode])
   @@index([orderDate])
