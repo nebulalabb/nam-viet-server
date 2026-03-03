@@ -585,9 +585,11 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: 'linhlyhai56@gmail.com' }, { employeeCode: 'NV-00010' }],
-      OR: [{ email: 'khangthiquy@gmail.com' }, { employeeCode: 'NV-00010' }],
-      OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00010' }],
+      // OR: [{ email: 'linhlyhai56@gmail.com' }, { employeeCode: 'NV-00010' }],
+      // OR: [{ email: 'khangthiquy@gmail.com' }, { employeeCode: 'NV-00011' }],
+      // OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00012' }],
+      OR: [{ email: 'nhan27122003@gmail.com' }, { employeeCode: 'NV-00013' }],
+
     },
   });
 
@@ -595,9 +597,10 @@ async function main() {
     adminUser = await prisma.user.create({
       data: {
         employeeCode: 'NV-00010',
-        email: 'linhlyhai56@gmail.com',
-        email: 'leeminhkang@gmail.com',
-        email: 'lyvanquy2020@gmail.com',
+        email: 'nhan27122003@gmail.com',
+        // email: 'linhlyhai56@gmail.com',
+        // email: 'leeminhkang@gmail.com',
+        // email: 'lyvanquy2020@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',
