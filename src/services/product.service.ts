@@ -104,6 +104,13 @@ class ProductService {
             supplierCode: true,
           },
         },
+        unit: {
+          select: {
+            id: true,
+            unitCode: true,
+            unitName: true,
+          },
+        },
         images: {
           orderBy: { displayOrder: 'asc' },
           select: {
@@ -171,6 +178,13 @@ class ProductService {
             supplierCode: true,
             phone: true,
             email: true,
+          },
+        },
+        unit: {
+          select: {
+            id: true,
+            unitCode: true,
+            unitName: true,
           },
         },
         images: {
@@ -275,7 +289,7 @@ class ProductService {
         packagingType: data.packagingType as any,
         categoryId: data.categoryId,
         supplierId: data.supplierId,
-        unit: data.unit,
+        unitId: data.unitId,
         barcode: data.barcode,
         weight: data.weight,
         dimensions: data.dimensions,
