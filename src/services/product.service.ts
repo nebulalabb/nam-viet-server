@@ -57,7 +57,6 @@ class ProductService {
       sortOrder = 'desc',
     } = params;
 
-    console.log('productType', productType);
 
     const offset = (page - 1) * limit;
 
