@@ -488,7 +488,7 @@ class ProductService {
         videos: true,
         inventory: true,
         purchaseOrderDetails: true,
-        salesOrderDetails: true,
+        invoiceDetails: true,
         bomMaterials: true,
         productionOrderMaterials: true,
       },
@@ -507,7 +507,7 @@ class ProductService {
       }
     }
 
-    if (product.purchaseOrderDetails.length > 0 || product.salesOrderDetails.length > 0) {
+    if (product.purchaseOrderDetails.length > 0 || product.invoiceDetails.length > 0) {
       throw new ValidationError(
         'Cannot delete product that has been used in orders. Consider marking it as discontinued instead.'
       );

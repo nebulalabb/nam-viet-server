@@ -73,8 +73,8 @@ model Warehouse {
   destinationTransfers    StockTransaction[]       @relation("DestinationWarehouse")
   fromStockTransfers      StockTransfer[]          @relation("FromWarehouse")
   toStockTransfers        StockTransfer[]          @relation("ToWarehouse")
-  salesOrders             SalesOrder[]
-  salesOrderDetails       SalesOrderDetail[]
+  invoices                Invoice[]
+  invoiceDetails          InvoiceDetail[]
   productionOrders        ProductionOrder[]
   stockTransactionDetails StockTransactionDetail[]
 
@@ -137,9 +137,9 @@ model User {
   productionOrdersCancelled  ProductionOrder[]  @relation("ProductionCanceller")
   customers                  Customer[]         @relation("CustomerCreator")
   customersUpdated           Customer[]         @relation("CustomerUpdater")
-  salesOrders                SalesOrder[]       @relation("SalesCreator")
-  salesOrdersApproved        SalesOrder[]       @relation("SalesApprover")
-  salesOrdersCancelled       SalesOrder[]       @relation("SalesCanceller")
+  invoices                   Invoice[]          @relation("SalesCreator")
+  invoicesApproved           Invoice[]          @relation("SalesApprover")
+  invoicesCancelled          Invoice[]          @relation("SalesCanceller")
   deliveries                 Delivery[]         @relation("DeliveryStaff")
   deliveriesSettled          Delivery[]         @relation("DeliverySettler")
   paymentReceipts            PaymentReceipt[]   @relation("ReceiptCreator")
@@ -271,9 +271,9 @@ model Category {
   updatedAt    DateTime       @updatedAt @map("updated_at")
   deletedAt    DateTime?      @map("deleted_at")
 
-  parent   Category?  @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
-  children Category[] @relation("CategoryParent")
-  products Product[]
+  parent    Category?  @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryParent")
+  products  Product[]
   materials Material[]
 
   @@index([parentId])
@@ -412,7 +412,7 @@ model Product {
   bomMaterials             BomMaterial[]
   productionOrders         ProductionOrder[]
   productionOrderMaterials ProductionOrderMaterial[]
-  salesOrderDetails        SalesOrderDetail[]
+  invoiceDetails           InvoiceDetail[]
   promotionProducts        PromotionProduct[]
   promotionGifts           PromotionProduct[]        @relation("GiftProduct")
   materials                ProductMaterial[]
@@ -747,7 +747,7 @@ model Customer {
   assignedUserId Int?  @map("assigned_user_id")
   assignedUser   User? @relation("CustomerManager", fields: [assignedUserId], references: [id], onDelete: SetNull)
 
-  salesOrders     SalesOrder[]
+  invoices        Invoice[]
   paymentReceipts PaymentReceipt[]
   // debtReconciliations DebtReconciliation[]
   debtPeriods     DebtPeriod[]
@@ -831,7 +831,7 @@ model Expiry {
 
   account CustomerExpiryAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   product Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
-  invoice SalesOrder?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice Invoice?              @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   user    User?                 @relation("ExpiryUser", fields: [userId], references: [id], onDelete: SetNull)
   creator User?                 @relation("ExpiryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   updater User?                 @relation("ExpiryUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
@@ -841,7 +841,7 @@ model Expiry {
   @@map("expiries")
 }
 
-model SalesOrder {
+model Invoice {
   id              Int           @id @default(autoincrement())
   orderCode       String        @unique @map("order_code") @db.VarChar(50)
   customerId      Int           @map("customer_id")
@@ -874,7 +874,7 @@ model SalesOrder {
   approver  User?      @relation("SalesApprover", fields: [approvedBy], references: [id])
   canceller User?      @relation("SalesCanceller", fields: [cancelledBy], references: [id])
 
-  details         SalesOrderDetail[]
+  details         InvoiceDetail[]
   deliveries      Delivery[]
   paymentReceipts PaymentReceipt[]
   expiries        Expiry[]
@@ -884,10 +884,10 @@ model SalesOrder {
   @@index([orderStatus])
   @@index([paymentStatus])
   @@index([customerId, orderDate])
-  @@map("sales_orders")
+  @@map("invoices")
 }
 
-model SalesOrderDetail {
+model InvoiceDetail {
   id              Int       @id @default(autoincrement())
   orderId         Int       @map("order_id")
   productId       Int       @map("product_id")
@@ -900,13 +900,13 @@ model SalesOrderDetail {
   expiryDate      DateTime? @map("expiry_date") @db.Date
   notes           String?   @db.VarChar(255)
 
-  order     SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Invoice    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product    @relation(fields: [productId], references: [id])
   warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
 
   @@index([orderId])
   @@index([productId])
-  @@map("sales_order_details")
+  @@map("invoice_details")
 }
 
 model Delivery {
@@ -932,9 +932,9 @@ model Delivery {
   updatedAt        DateTime         @updatedAt @map("updated_at")
   deletedAt        DateTime?        @map("deleted_at")
 
-  order         SalesOrder @relation(fields: [orderId], references: [id])
-  deliveryStaff User       @relation("DeliveryStaff", fields: [deliveryStaffId], references: [id])
-  settler       User?      @relation("DeliverySettler", fields: [settledBy], references: [id])
+  order         Invoice @relation(fields: [orderId], references: [id])
+  deliveryStaff User    @relation("DeliveryStaff", fields: [deliveryStaffId], references: [id])
+  settler       User?   @relation("DeliverySettler", fields: [settledBy], references: [id])
 
   @@index([deliveryCode])
   @@index([deliveryStatus])
@@ -965,10 +965,10 @@ model PaymentReceipt {
   createdAt            DateTime             @default(now()) @map("created_at")
   deletedAt            DateTime?            @map("deleted_at")
 
-  customer    SalesOrder? @relation(fields: [orderId], references: [id])
-  customerRef Customer    @relation(fields: [customerId], references: [id])
-  creator     User        @relation("ReceiptCreator", fields: [createdBy], references: [id])
-  approver    User?       @relation("ReceiptApprover", fields: [approvedBy], references: [id])
+  customer    Invoice? @relation(fields: [orderId], references: [id])
+  customerRef Customer @relation(fields: [customerId], references: [id])
+  creator     User     @relation("ReceiptCreator", fields: [createdBy], references: [id])
+  approver    User?    @relation("ReceiptApprover", fields: [approvedBy], references: [id])
 
   @@index([receiptCode])
   @@index([receiptDate])

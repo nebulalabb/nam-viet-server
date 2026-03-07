@@ -38,7 +38,7 @@ import stockTransferRoutes from '@routes/stock-transfer.routes';
 import bomRoutes from '@routes/bom.routes';
 import productionOrderRoutes from '@routes/production-order.routes';
 import customerRoutes from '@routes/customer.routes';
-import salesOrderRoutes from '@routes/sales-order.routes';
+import invoiceRoutes from '@routes/invoice.routes';
 import deliveryRoutes from '@routes/delivery.routes';
 import paymentReceiptRoutes from '@routes/payment-receipt.routes';
 import paymentVoucherRoutes from '@routes/payment-voucher.routes';
@@ -68,7 +68,7 @@ import cs_inventoryRoutes from '@routes/cs-inventory.routes';
 import expiryRoutes from '@routes/expiry.routes';
 import cs_customerRoutes from '@routes/cs-customer.routes';
 import cs_warehouseRoutes from '@routes/cs-warehouse.routes';
-import cs_salesOrderRoutes from '@routes/cs-sales-order.routes';
+import cs_invoiceRoutes from '@routes/cs-invoice.routes';
 import cs_product_Routes from '@routes/cs-product.routes';
 
 // News routes
@@ -231,7 +231,7 @@ app.use('/api/stock-transfers', stockTransferRoutes);
 app.use('/api/bom', bomRoutes);
 app.use('/api/production-orders', productionOrderRoutes);
 app.use('/api/customers', customerRoutes);
-app.use('/api/sales-orders', salesOrderRoutes);
+app.use('/api/invoices', invoiceRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/payment-receipts', paymentReceiptRoutes);
 app.use('/api/payment-vouchers', paymentVoucherRoutes);
@@ -264,7 +264,7 @@ app.use('/api/cs/products', cs_productRoutes);
 app.use('/api/cs/inventory', cs_inventoryRoutes);
 app.use('/api/cs/customers', cs_customerRoutes);
 app.use('/api/cs/warehouses', cs_warehouseRoutes);
-app.use('/api/cs/sale-order', cs_salesOrderRoutes);
+app.use('/api/cs/invoices', cs_invoiceRoutes);
 app.use('/api/cs/products', cs_product_Routes);
 
 // News routes
@@ -349,7 +349,7 @@ httpServer.listen(PORT, async () => {
 ║   📋 BOM API: http://localhost:${PORT}/api/bom           ║
 ║   🏭 Production Orders API: http://localhost:${PORT}/api/production-orders ║
 ║   👤 Customer API: http://localhost:${PORT}/api/customers ║
-║   🛒 Sales Orders API: http://localhost:${PORT}/api/sales-orders ║
+║   🛒 Sales Orders API: http://localhost:${PORT}/api/invoices ║
 ║   🚚 Deliveries API: http://localhost:${PORT}/api/deliveries ║
 ║   💰 Payment Receipts API: http://localhost:${PORT}/api/payment-receipts ║
 ║   💸 Payment Vouchers API: http://localhost:${PORT}/api/payment-vouchers ║
