@@ -35,8 +35,6 @@ import productRoutes from '@routes/product.routes';
 import inventoryRoutes from '@routes/inventory.routes';
 import stockTransactionRoutes from '@routes/stock-transaction.routes';
 import stockTransferRoutes from '@routes/stock-transfer.routes';
-import bomRoutes from '@routes/bom.routes';
-import productionOrderRoutes from '@routes/production-order.routes';
 import customerRoutes from '@routes/customer.routes';
 import invoiceRoutes from '@routes/invoice.routes';
 import deliveryRoutes from '@routes/delivery.routes';
@@ -51,7 +49,6 @@ import overtimeRoutes from '@routes/overtime.routes';
 import notificationRoutes from '@routes/notification.routes';
 import reportRoutes from '@routes/report.routes';
 import financeRoutes from '@routes/finance.routes';
-import productionReportRoutes from '@routes/production-report.routes';
 import performanceRoutes from '@routes/performance.routes';
 import securityRoutes from '@routes/security.routes';
 import generalSettingRoutes from '@routes/general-setting.routes';
@@ -61,15 +58,7 @@ import taxRoutes from '@routes/tax.routes';
 import attributeRoutes from '@routes/attribute.routes';
 
 import smartDebtRoutes from '@routes/smart-debt.routes';
-import cs_authRoutes from '@routes/cs-auth.routes';
-import cs_categoryRoutes from '@routes/cs-category.routes';
-import cs_productRoutes from '@routes/cs-product.routes';
-import cs_inventoryRoutes from '@routes/cs-inventory.routes';
 import expiryRoutes from '@routes/expiry.routes';
-import cs_customerRoutes from '@routes/cs-customer.routes';
-import cs_warehouseRoutes from '@routes/cs-warehouse.routes';
-import cs_invoiceRoutes from '@routes/cs-invoice.routes';
-import cs_product_Routes from '@routes/cs-product.routes';
 
 // News routes
 import newsRoutes from '@routes/news.routes';
@@ -228,8 +217,6 @@ app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/stock-transactions', stockTransactionRoutes);
 app.use('/api/stock-transfers', stockTransferRoutes);
-app.use('/api/bom', bomRoutes);
-app.use('/api/production-orders', productionOrderRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/deliveries', deliveryRoutes);
@@ -246,7 +233,6 @@ app.use('/api/notification', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/expiry', expiryRoutes);
 app.use('/api/finance', financeRoutes);
-app.use('/api/reports', productionReportRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/settings/general', generalSettingRoutes);
@@ -257,15 +243,6 @@ app.use('/api/attributes', attributeRoutes);
 
 // Smart Debt routes
 app.use('/api/smart-debt', smartDebtRoutes);
-//custommer service routes
-app.use('/api/cs/auth', cs_authRoutes);
-app.use('/api/cs/categories', cs_categoryRoutes);
-app.use('/api/cs/products', cs_productRoutes);
-app.use('/api/cs/inventory', cs_inventoryRoutes);
-app.use('/api/cs/customers', cs_customerRoutes);
-app.use('/api/cs/warehouses', cs_warehouseRoutes);
-app.use('/api/cs/invoices', cs_invoiceRoutes);
-app.use('/api/cs/products', cs_product_Routes);
 
 // News routes
 app.use('/api/news', newsRoutes);

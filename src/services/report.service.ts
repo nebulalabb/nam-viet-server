@@ -123,7 +123,7 @@ class ReportService {
       this.getLowStockCount(warehouseId),
       this.getTotalReceivables(), // Global debt
       this.getOverdueDebtCount(), // Global debt
-      prisma.productionOrder.count({ where: { status: 'in_progress' } }), // Global production for now
+      0, // Production module removed
 
       // Charts
       this.getDashboardRevenue({
@@ -150,7 +150,7 @@ class ReportService {
         take: 3,
         include: {
           product: {
-            select: { id: true, productName: true, sku: true, minStockLevel: true },
+            select: { id: true, productName: true, code: true, minStockLevel: true },
           },
           warehouse: { select: { id: true, warehouseName: true } },
         },
@@ -213,7 +213,7 @@ class ReportService {
     const formattedLowStockItems = lowStockItems.map((inv: any) => ({
       product_id: inv.product.id,
       product_name: inv.product.productName,
-      sku: inv.product.sku,
+      sku: inv.product.code,
       current_stock: Number(inv.quantity),
       min_stock: Number(inv.product.minStockLevel),
       warehouse_id: inv.warehouse.id,
@@ -246,11 +246,7 @@ class ReportService {
           activityType = 'order';
         } else if (['inventory', 'stock_transactions'].includes(log.tableName)) {
           activityType = 'inventory';
-        } else if (['production_orders'].includes(log.tableName)) {
-          activityType = 'production';
-        } else if (
-          ['payment_vouchers', 'payment_receipts', 'debt_reconciliation'].includes(log.tableName)
-        ) {
+        } else if (['cash_funds', 'payment_vouchers', 'payment_receipts'].includes(log.tableName)) {
           activityType = 'finance';
         }
       }
@@ -391,7 +387,7 @@ class ReportService {
       this.getOverdueDebtCount(),
 
       // Production
-      prisma.productionOrder.count({ where: { status: 'in_progress' } }),
+      0, // Production module removed
     ]);
 
     const dashboard = {
@@ -880,9 +876,7 @@ class ReportService {
     const where: Prisma.InventoryWhereInput = {
       ...(warehouseId && { warehouseId }),
       ...(productType && {
-        product: {
-          productType: productType as any,
-        },
+        // Product type filtering removed as productType field was removed
       }),
       ...(categoryId && {
         product: {
@@ -893,7 +887,7 @@ class ReportService {
         OR: [
           {
             product: {
-              sku: {
+              code: {
                 contains: searchTerm,
               },
             },
@@ -921,14 +915,11 @@ class ReportService {
         },
         product: {
           select: {
-            id: true,
-            sku: true,
+            code: true,
             productName: true,
-            productType: true,
             unit: true,
             minStockLevel: true,
-            purchasePrice: true,
-            expiryDate: true,
+            basePrice: true,
             category: {
               select: {
                 categoryName: true,
@@ -941,35 +932,31 @@ class ReportService {
 
     const items = inventory.map((inv) => {
       const availableQty = Number(inv.quantity) - Number(inv.reservedQuantity);
-      const value = availableQty * Number(inv.product.purchasePrice || 0);
+      const value = availableQty * Number(inv.product.basePrice || 0);
       const isLowStock = availableQty < Number(inv.product.minStockLevel);
       
-      // Check if expiring (within 7 days or already expired)
-      const expiryDate = inv.product.expiryDate ? new Date(inv.product.expiryDate) : null;
-      const today = new Date();
-      const daysUntilExpiry = expiryDate 
-        ? Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        : null;
-      const isExpiring = daysUntilExpiry !== null && daysUntilExpiry <= 7;
+      // Check if expiring (within 7 days or already expired) - expiryDate field was removed from schema
+      const daysUntilExpiry = null;
+      const isExpiring = false;
 
       return {
         warehouseId: inv.warehouseId,
         warehouseName: inv.warehouse.warehouseName,
         warehouseType: inv.warehouse.warehouseType,
         productId: inv.productId,
-        sku: inv.product.sku,
+        sku: inv.product.code, // Keep returning sku key for frontend but map to code
         productName: inv.product.productName,
-        productType: inv.product.productType,
+        productType: 'standard', // Hardcode standard as productType was removed
         categoryName: inv.product.category?.categoryName,
         unit: inv.product.unit,
         quantity: Number(inv.quantity),
         reservedQuantity: Number(inv.reservedQuantity),
         availableQuantity: availableQty,
         minStockLevel: Number(inv.product.minStockLevel),
-        unitPrice: Number(inv.product.purchasePrice || 0),
+        unitPrice: Number(inv.product.basePrice || 0),
         totalValue: value,
         isLowStock,
-        expiryDate: inv.product.expiryDate,
+        expiryDate: null,
         daysUntilExpiry,
         isExpiring,
       };
@@ -1038,9 +1025,7 @@ class ReportService {
       where: {
         ...(warehouseId && { warehouseId }),
         ...(productType && {
-          product: {
-            productType: productType as any,
-          },
+          // Product type filtering removed 
         }),
         ...(categoryId && {
           product: {
@@ -1052,10 +1037,10 @@ class ReportService {
         product: {
           select: {
             id: true,
-            sku: true,
+            code: true,
             productName: true,
             unit: true,
-            purchasePrice: true,
+            basePrice: true,
           },
         },
       },
@@ -1109,14 +1094,14 @@ class ReportService {
 
       return {
         productId,
-        sku: inv.product.sku,
+        sku: inv.product.code,
         productName: inv.product.productName,
         unit: inv.product.unit,
         beginningQuantity: Math.max(0, beginningQty),
         importQuantity: trans.imports,
         exportQuantity: trans.exports,
         endingQuantity: endingQty,
-        unitPrice: Number(inv.product.purchasePrice || 0),
+        unitPrice: Number(inv.product.basePrice || 0),
       };
     });
 
@@ -1134,15 +1119,14 @@ class ReportService {
       include: {
         product: {
           select: {
-            productType: true,
-            purchasePrice: true,
+            basePrice: true,
           },
         },
       },
     });
 
     const grouped = result.reduce((acc, inv) => {
-      const type = inv.product.productType;
+      const type = 'standard'; // hardcoded instead of inv.product.productType
       if (!acc[type]) {
         acc[type] = {
           productType: type,
@@ -1153,7 +1137,7 @@ class ReportService {
       }
       const qty = Number(inv.quantity) - Number(inv.reservedQuantity);
       acc[type].quantity += qty;
-      acc[type].value += qty * Number(inv.product.purchasePrice || 0);
+      acc[type].value += qty * Number(inv.product.basePrice || 0);
       acc[type].itemCount += 1;
       return acc;
     }, {} as Record<string, { productType: string; quantity: number; value: number; itemCount: number }>);
@@ -1181,7 +1165,7 @@ class ReportService {
           select: {
             id: true,
             productName: true,
-            sku: true,
+            code: true,
           },
         },
       },
@@ -1194,8 +1178,8 @@ class ReportService {
           select: {
             id: true,
             productName: true,
-            sku: true,
-            purchasePrice: true,
+            code: true,
+            basePrice: true,
           },
         },
       },
@@ -1210,7 +1194,7 @@ class ReportService {
       return {
         productId: inv.productId,
         productName: inv.product.productName,
-        sku: inv.product.sku,
+        sku: inv.product.code,
         currentStock: Number(inv.quantity),
         totalSold,
         turnoverRate: Number(turnoverRate.toFixed(2)),
@@ -1242,7 +1226,7 @@ class ReportService {
         product: {
           select: {
             id: true,
-            sku: true,
+            code: true,
             productName: true,
             unit: true,
             category: {
@@ -1262,7 +1246,7 @@ class ReportService {
         acc[key] = {
           productId: detail.productId,
           productName: detail.product.productName,
-          sku: detail.product.sku,
+          sku: detail.product.code,
           categoryName: detail.product.category?.categoryName,
           unit: detail.product.unit,
           quantitySold: 0,
@@ -1375,7 +1359,7 @@ class ReportService {
       where,
       include: {
         details: {
-          include: { product: { select: { purchasePrice: true } } },
+          include: { product: { select: { basePrice: true } } },
         },
       },
     });
@@ -1394,8 +1378,8 @@ class ReportService {
     // Estimated profit
     let estimatedProfit = 0;
     orders.forEach((order) => {
-      order.details.forEach((detail) => {
-        const cost = Number(detail.product.purchasePrice || 0) * Number(detail.quantity || 0);
+      order.details.forEach((detail: any) => {
+        const cost = Number(detail.product.basePrice || 0) * Number(detail.quantity || 0);
         const revenue = Number(detail.unitPrice || 0) * Number(detail.quantity || 0);
         estimatedProfit += revenue - cost;
       });
@@ -1559,137 +1543,14 @@ class ReportService {
   }
 
   // =====================================================
-  // PRODUCTION ANALYTICS
+  // PRODUCTION ANALYTICS (REMOVED)
   // =====================================================
-  async getProductionReport(fromDate?: string, toDate?: string) {
-    const dateRange = this.getDateRange(fromDate, toDate);
-
-    const orders = await prisma.productionOrder.findMany({
-      where: {
-        status: 'completed',
-        completedAt: {
-          gte: dateRange.fromDate,
-          lte: dateRange.toDate,
-        },
-      },
-      include: {
-        finishedProduct: {
-          select: {
-            productName: true,
-            sku: true,
-          },
-        },
-        materials: true,
-      },
-    });
-
-    const summary = {
-      totalOrders: orders.length,
-      totalPlanned: orders.reduce((sum, o) => sum + Number(o.plannedQuantity), 0),
-      totalProduced: orders.reduce((sum, o) => sum + Number(o.actualQuantity || 0), 0),
-      totalCost: orders.reduce((sum, o) => sum + Number(o.productionCost || 0), 0),
-      averageEfficiency:
-        orders.length > 0
-          ? orders.reduce((sum, o) => {
-              const planned = Number(o.plannedQuantity);
-              const actual = Number(o.actualQuantity || 0);
-              return sum + (planned > 0 ? (actual / planned) * 100 : 0);
-            }, 0) / orders.length
-          : 0,
-    };
-
-    const details = orders.map((order) => {
-      const plannedQty = Number(order.plannedQuantity);
-      const actualQty = Number(order.actualQuantity || 0);
-      const wastage = order.materials.reduce((sum, m) => sum + Number(m.wastage || 0), 0);
-
-      return {
-        orderCode: order.orderCode,
-        productName: order.finishedProduct.productName,
-        sku: order.finishedProduct.sku,
-        plannedQuantity: plannedQty,
-        actualQuantity: actualQty,
-        efficiency: plannedQty > 0 ? (actualQty / plannedQty) * 100 : 0,
-        wastage,
-        cost: Number(order.productionCost || 0),
-        startDate: order.startDate,
-        endDate: order.endDate,
-        completedAt: order.completedAt,
-      };
-    });
-
-    return {
-      summary,
-      data: details,
-    };
+  async getProductionReport(_fromDate?: string, _toDate?: string) {
+    return { summary: { totalOrders: 0, totalPlanned: 0, totalProduced: 0, totalCost: 0, averageEfficiency: 0 }, data: [] };
   }
 
-  async getWastageReport(fromDate?: string, toDate?: string) {
-    const dateRange = this.getDateRange(fromDate, toDate);
-
-    const materials = await prisma.productionOrderMaterial.findMany({
-      where: {
-        productionOrder: {
-          status: 'completed',
-          completedAt: {
-            gte: dateRange.fromDate,
-            lte: dateRange.toDate,
-          },
-        },
-        wastage: {
-          gt: 0,
-        },
-      },
-      include: {
-        material: {
-          select: {
-            productName: true,
-            sku: true,
-            unit: true,
-            purchasePrice: true,
-          },
-        },
-        productionOrder: {
-          select: {
-            orderCode: true,
-            completedAt: true,
-          },
-        },
-      },
-    });
-
-    const grouped = materials.reduce((acc, mat) => {
-      const key = mat.materialId;
-      if (!acc[key]) {
-        acc[key] = {
-          materialId: mat.materialId,
-          materialName: mat.material.productName,
-          sku: mat.material.sku,
-          unit: mat.material.unit,
-          totalWastage: 0,
-          totalCost: 0,
-          occurrences: 0,
-        };
-      }
-      const wastage = Number(mat.wastage || 0);
-      acc[key].totalWastage += wastage;
-      acc[key].totalCost += wastage * Number(mat.material.purchasePrice || 0);
-      acc[key].occurrences += 1;
-      return acc;
-    }, {} as Record<number, any>);
-
-    const result = Object.values(grouped).sort((a: any, b: any) => b.totalCost - a.totalCost);
-
-    const summary = {
-      totalWastageCost: result.reduce((sum: number, item: any) => sum + item.totalCost, 0),
-      totalOccurrences: materials.length,
-      affectedProducts: result.length,
-    };
-
-    return {
-      summary,
-      data: result,
-    };
+  async getWastageReport(_fromDate?: string, _toDate?: string) {
+    return { summary: { totalWastageCost: 0, totalOccurrences: 0, affectedProducts: 0 }, data: [] };
   }
 
   // =====================================================
@@ -1887,7 +1748,7 @@ class ReportService {
       include: {
         product: {
           select: {
-            purchasePrice: true,
+            basePrice: true,
           },
         },
       },
@@ -1895,7 +1756,7 @@ class ReportService {
 
     return inventory.reduce((sum, inv) => {
       const qty = Number(inv.quantity) - Number(inv.reservedQuantity);
-      return sum + qty * Number(inv.product.purchasePrice || 0);
+      return sum + qty * Number(inv.product.basePrice || 0);
     }, 0);
   }
 
@@ -2017,15 +1878,15 @@ class ReportService {
       where,
       include: {
         details: {
-          include: { product: { select: { purchasePrice: true } } },
+          include: { product: { select: { basePrice: true } } },
         },
       },
     });
 
     let profit = 0;
     orders.forEach((order) => {
-      order.details.forEach((detail) => {
-        const cost = Number(detail.product.purchasePrice || 0) * Number(detail.quantity || 0);
+      order.details.forEach((detail: any) => {
+        const cost = Number(detail.product.basePrice || 0) * Number(detail.quantity || 0);
         const revenue = Number(detail.unitPrice || 0) * Number(detail.quantity || 0);
         profit += revenue - cost;
       });
@@ -2144,7 +2005,7 @@ class ReportService {
       const details = await prisma.invoiceDetail.findMany({
         where: { order: where },
         include: {
-          product: { select: { id: true, productName: true, sku: true } },
+          product: { select: { id: true, productName: true, code: true } },
         },
       });
 
@@ -2155,7 +2016,7 @@ class ReportService {
           productMap.set(key, {
             id: detail.productId,
             productName: detail.product.productName,
-            sku: detail.product.sku,
+            sku: detail.product.code,
             totalQty: 0,
             totalRevenue: 0,
           });

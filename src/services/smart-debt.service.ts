@@ -377,13 +377,7 @@ class SmartDebtService {
         orderBy: { orderDate: 'desc' },
         select: {
           id: true, orderCode: true, totalAmount: true, orderDate: true, orderStatus: true,
-          notes: true,
-          details: {
-            select: {
-              quantity: true, unitPrice: true,
-              product: { select: { id: true, productName: true, sku: true } }
-            }
-          }
+          notes: true
         }
       });
 
@@ -409,7 +403,7 @@ class SmartDebtService {
           orderBy: { createdAt: 'desc' },
           include: {
             details: {
-              include: { product: { select: { productName: true, sku: true } } }
+              include: { product: { select: { productName: true, code: true } } }
             }
           }
         });
@@ -459,7 +453,7 @@ class SmartDebtService {
           id: true, poCode: true, totalAmount: true, orderDate: true, status: true,
           notes: true,
           details: {
-            include: { product: { select: { id: true, productName: true, sku: true } } }
+            include: { product: { select: { id: true, productName: true, code: true } } }
           }
         }
       });
@@ -485,7 +479,7 @@ class SmartDebtService {
           orderBy: { createdAt: 'desc' },
           include: {
             details: {
-              include: { product: { select: { productName: true, sku: true } } }
+              include: { product: { select: { productName: true, code: true } } }
             }
           }
         });
@@ -512,7 +506,7 @@ class SmartDebtService {
             date: order.orderDate,
             productId: item.productId,
             productName: item.product?.productName || "Sản phẩm đã xóa",
-            sku: item.product?.sku,
+            sku: item.product?.code,
             quantity: Number(item.quantity),
             price: Number(item.unitPrice || item.price || 0),
           });

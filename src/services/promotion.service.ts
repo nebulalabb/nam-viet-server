@@ -196,16 +196,16 @@ class PromotionService {
             product: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
                 unit: true,
-                sellingPriceRetail: true,
+                price: true,
               },
             },
             giftProduct: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
                 unit: true,
               },
@@ -754,7 +754,7 @@ class PromotionService {
             product: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
                 categoryId: true,
               },
@@ -762,7 +762,7 @@ class PromotionService {
             giftProduct: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
               },
             },

@@ -11,8 +11,6 @@ class ProductController {
       page,
       limit,
       search,
-      productType,
-      packagingType,
       categoryId,
       warehouseId,
       supplierId,
@@ -25,15 +23,12 @@ class ProductController {
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 20,
       search,
-      productType,
-      packagingType,
       categoryId: categoryId ? parseInt(categoryId) : undefined,
       supplierId: supplierId ? parseInt(supplierId) : undefined,
       warehouseId: warehouseId ? parseInt(warehouseId) : undefined,
       status,
       sortBy,
       sortOrder,
-      isFeatured: req.query.isFeatured === 'true' ? true : req.query.isFeatured === 'false' ? false : undefined,
     });
 
     const response: ApiResponse = {

@@ -17,7 +17,6 @@ class InventoryService {
       search,
       warehouseId,
       productId,
-      productType,
       warehouseType,
       categoryId,
       lowStock,
@@ -34,17 +33,12 @@ class InventoryService {
       ...(search && {
         OR: [
           { product: { productName: { contains: search } } },
-          { product: { sku: { contains: search } } },
+          { product: { code: { contains: search } } },
           { warehouse: { warehouseName: { contains: search } } },
         ],
       }),
       ...(warehouseId && { warehouseId: Number(warehouseId) }),
       ...(productId && { productId: Number(productId) }),
-      ...(productType && {
-        product: {
-          productType: productType as any,
-        },
-      }),
       ...(warehouseType && {
         warehouse: {
           warehouseType: warehouseType as any,
@@ -77,13 +71,12 @@ class InventoryService {
           product: {
             select: {
               id: true,
-              sku: true,
+              code: true,
               productName: true,
-              expiryDate: true,
               unitId: true,
               unit: { select: { unitCode: true, unitName: true } },
               minStockLevel: true,
-              purchasePrice: true,
+              basePrice: true,
             },
           },
         },
@@ -113,7 +106,7 @@ class InventoryService {
 
     // Stas
     const totalValue = inventories.reduce((sum, item) => {
-      const value = Number(item.quantity) * Number(item.product?.purchasePrice || 0);
+      const value = Number(item.quantity) * Number(item.product?.basePrice || 0);
       return sum + value;
     }, 0);
     const lowStockItems = inventories.filter((item) => {
@@ -125,12 +118,7 @@ class InventoryService {
       (sum, item) => sum + Number(item.reservedQuantity),
       0
     );
-    const expiredQuantity = inventories.reduce((sum, item) => {
-      if (item.product?.expiryDate && item.product.expiryDate < new Date()) {
-        return sum + Number(item.quantity);
-      }
-      return sum;
-    }, 0);
+    const expiredQuantity = 0; // Expiry dates are now tracked only in inventory tracking/receipts, not product level.
 
     const result = {
       data: inventoryWithCalc,
@@ -163,7 +151,7 @@ class InventoryService {
       ...(search && {
         OR: [
           { product: { productName: { contains: search } } },
-          { product: { sku: { contains: search } } },
+          { product: { code: { contains: search } } },
           { warehouse: { warehouseName: { contains: search } } },
         ],
       }),
@@ -268,7 +256,7 @@ class InventoryService {
         product: {
           select: {
             minStockLevel: true,
-            sku: true,
+            code: true,
             productName: true,
           },
         },
@@ -345,9 +333,8 @@ class InventoryService {
     const result = {
       product: {
         id: product.id,
-        sku: product.sku,
+        code: product.code,
         productName: product.productName,
-        productType: product.productType,
         unitId: product.unitId,
         minStockLevel: product.minStockLevel,
       },
@@ -388,7 +375,7 @@ class InventoryService {
           product: {
             select: {
               id: true,
-              sku: true,
+              code: true,
               productName: true,
               unitId: true,
             },
@@ -607,7 +594,7 @@ class InventoryService {
           product: {
             select: {
               id: true,
-              sku: true,
+              code: true,
               productName: true,
             },
           },
@@ -683,7 +670,7 @@ class InventoryService {
           product: {
             select: {
               id: true,
-              sku: true,
+              code: true,
               productName: true,
             },
           },
@@ -736,13 +723,12 @@ class InventoryService {
         product: {
           select: {
             id: true,
-            sku: true,
+            code: true,
             productName: true,
-            productType: true,
             unitId: true,
             unit: { select: { unitCode: true, unitName: true } },
-            purchasePrice: true,
-            sellingPriceRetail: true,
+            basePrice: true,
+            price: true,
           },
         },
       },
@@ -750,8 +736,8 @@ class InventoryService {
 
     const report = inventory.map((inv) => {
       const qty = Number(inv.quantity);
-      const purchasePrice = Number(inv.product.purchasePrice || 0);
-      const sellingPrice = Number(inv.product.sellingPriceRetail || 0);
+      const purchasePrice = Number(inv.product.basePrice || 0);
+      const sellingPrice = Number(inv.product.price || 0);
 
       return {
         ...inv,
@@ -766,24 +752,6 @@ class InventoryService {
     const totalPotentialValue = report.reduce((sum, item) => sum + item.potentialValue, 0);
     const totalPotentialProfit = report.reduce((sum, item) => sum + item.potentialProfit, 0);
 
-    const byProductType = report.reduce(
-      (acc, item) => {
-        const type = item.product.productType;
-        if (!acc[type]) {
-          acc[type] = {
-            count: 0,
-            purchaseValue: 0,
-            potentialValue: 0,
-          };
-        }
-        acc[type].count++;
-        acc[type].purchaseValue += item.purchaseValue;
-        acc[type].potentialValue += item.potentialValue;
-        return acc;
-      },
-      {} as Record<string, any>
-    );
-
     return {
       items: report,
       summary: {
@@ -796,8 +764,58 @@ class InventoryService {
             ? ((totalPotentialProfit / totalPurchaseValue) * 100).toFixed(2) + '%'
             : '0%',
       },
-      byProductType,
     };
+  }
+
+  async deductInventoryBatchFEFO(
+    tx: any,
+    warehouseId: number,
+    productId: number,
+    quantityToDeduct: number,
+    userId: number
+  ) {
+    let remainingQuantity = quantityToDeduct;
+    const deductedBatches = [];
+
+    // Lấy danh sách các lô còn hàng, sắp xếp theo Ngày hết hạn (FEFO)
+    const batches = await tx.inventoryBatch.findMany({
+      where: {
+        warehouseId,
+        productId,
+        quantity: { gt: 0 }
+      },
+      orderBy: [
+        { expiryDate: 'asc' },
+        { id: 'asc' }
+      ]
+    });
+
+    for (const batch of batches) {
+      if (remainingQuantity <= 0) break;
+
+      const availableInBatch = Number(batch.quantity);
+      const deductAmount = Math.min(availableInBatch, remainingQuantity);
+
+      // Cập nhật số lượng của lô
+      await tx.inventoryBatch.update({
+        where: { id: batch.id },
+        data: {
+          quantity: { decrement: deductAmount },
+          updatedBy: userId
+        }
+      });
+
+      deductedBatches.push({
+        inventoryBatchId: batch.id,
+        batchNumber: batch.batchNumber,
+        expiryDate: batch.expiryDate,
+        quantity: deductAmount
+      });
+
+      remainingQuantity -= deductAmount;
+    }
+
+    return deductedBatches;
   }
 }
 

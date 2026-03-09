@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '@utils/errors';
 import { logActivity } from '@utils/logger';
 import customerService from './customer.service';
 import notificationService from './notification.service';
+import inventoryService from './inventory.service';
 import {
   CreateInvoiceInput,
   UpdateInvoiceInput,
@@ -246,10 +247,9 @@ class InvoiceService {
             product: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
                 unit: true,
-                productType: true,
               },
             },
             warehouse: {
@@ -386,9 +386,8 @@ class InvoiceService {
 
     let subtotal = 0;
     const itemsWithCalculations = data.items.map((item) => {
-      const product = products.find((p) => p.id === item.productId);
       const discountPercent = item.discountPercent || 0;
-      const taxRate = product?.taxRate || 0;
+      const taxRate = 0; // Tax rate no longer tied to product directly in this simplified version
 
       const lineTotal = item.quantity * item.unitPrice;
       const discountAmount = lineTotal * (discountPercent / 100);
@@ -546,6 +545,24 @@ class InvoiceService {
                 updatedBy: userId,
               },
             });
+
+            // FEFO Deduction for InventoryBatch and link to InvoiceDetail
+            const orderDetail = order.details.find(d => d.productId === item.productId);
+            if (orderDetail) {
+              const deductedBatches = await inventoryService.deductInventoryBatchFEFO(
+                tx, warehouseId, item.productId, item.quantity, userId
+              );
+
+              if (deductedBatches && deductedBatches.length > 0) {
+                await tx.invoiceBatchDetail.createMany({
+                  data: deductedBatches.map(b => ({
+                    invoiceDetailId: orderDetail.id,
+                    inventoryBatchId: b.inventoryBatchId,
+                    quantity: b.quantity
+                  }))
+                });
+              }
+            }
           }
         }
       }

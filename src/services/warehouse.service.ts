@@ -115,7 +115,7 @@ class WarehouseService {
           quantity: true,
           product: {
             select: {
-              purchasePrice: true,
+              basePrice: true,
             },
           },
         },
@@ -126,10 +126,10 @@ class WarehouseService {
     const totalInventoryValue = allInventory.reduce((sum, item) => {
       const quantity =
         typeof item.quantity === 'object' ? item.quantity.toNumber() : Number(item.quantity);
-      const price = item.product?.purchasePrice
-        ? typeof item.product.purchasePrice === 'object'
-          ? item.product.purchasePrice.toNumber()
-          : Number(item.product.purchasePrice)
+      const price = item.product?.basePrice
+        ? typeof item.product.basePrice === 'object'
+          ? item.product.basePrice.toNumber()
+          : Number(item.product.basePrice)
         : 0;
       const value = quantity * price;
       return sum + value;
@@ -204,7 +204,6 @@ class WarehouseService {
             stockTransactions: true,
             purchaseOrders: true,
             invoices: true,
-            productionOrders: true,
           },
         },
       },
@@ -411,7 +410,7 @@ class WarehouseService {
         quantity: true,
         product: {
           select: {
-            purchasePrice: true,
+            basePrice: true,
           },
         },
       },
@@ -419,7 +418,7 @@ class WarehouseService {
 
     let totalInventoryValue = 0;
     for (const item of inventoryWithPrice) {
-      const price = item.product?.purchasePrice ? Number(item.product.purchasePrice) : 0;
+      const price = item.product?.basePrice ? Number(item.product.basePrice) : 0;
       const quantity = Number(item.quantity);
       totalInventoryValue += price * quantity;
     }

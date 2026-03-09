@@ -172,11 +172,10 @@ class PurchaseOrderService {
               product: {
                 select: {
                   id: true,
-                  sku: true,
+                  code: true,
                   productName: true,
-                  productType: true,
                   unit: true,
-                  purchasePrice: true,
+                  basePrice: true,
                 },
               },
             },

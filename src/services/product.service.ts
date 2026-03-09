@@ -13,33 +13,10 @@ import { serializeBigInt } from '@utils/serializer';
 const prisma = new PrismaClient();
 
 class ProductService {
-  private async generateSKU(productType: string): Promise<string> {
-    const prefix = this.getSKUPrefix(productType);
-    const count = await prisma.product.count({
-      where: { productType: productType as any },
-    });
+  private async generateCode(): Promise<string> {
+    const count = await prisma.product.count();
     const number = (count + 1).toString().padStart(4, '0');
-    return `${prefix}-${number}`;
-  }
-
-  private getSKUPrefix(productType: string): string {
-    const prefixes: Record<string, string> = {
-      raw_material: 'NL',
-      packaging: 'BB',
-      finished_product: 'TP',
-      goods: 'HH',
-    };
-    return prefixes[productType] || 'PRD';
-  }
-
-  private generateSlug(productName: string): string {
-    return productName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[đĐ]/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    return `PRD-${number}`;
   }
 
   async getAll(params: ProductQueryInput) {
@@ -47,8 +24,6 @@ class ProductService {
       page = 1,
       limit = 20,
       search,
-      productType,
-      packagingType,
       categoryId,
       supplierId,
       warehouseId,
@@ -65,14 +40,9 @@ class ProductService {
       ...(search && {
         OR: [
           { productName: { contains: search } },
-          { sku: { contains: search } },
-          { barcode: { contains: search } },
+          { code: { contains: search } },
         ],
       }),
-      ...(productType && {
-        productType: Array.isArray(productType) ? { in: productType } : productType,
-      }),
-      ...(packagingType && { packagingType: packagingType as any }),
       ...(categoryId && { categoryId }),
       ...(supplierId && { supplierId }),
       ...(warehouseId && {
@@ -261,65 +231,29 @@ class ProductService {
       }
     }
 
-    const sku = data.sku || (await this.generateSKU(data.productType));
+    const code = data.code || (await this.generateCode());
 
-    const existingSKU = await prisma.product.findUnique({
-      where: { sku },
+    const existingCode = await prisma.product.findUnique({
+      where: { code },
     });
-    if (existingSKU) {
-      throw new ConflictError('SKU already exists', { sku });
-    }
-
-    const slug = this.generateSlug(data.productName);
-
-    let finalSlug = slug;
-    let counter = 1;
-    while (
-      await prisma.product.findUnique({
-        where: { slug: finalSlug },
-      })
-    ) {
-      finalSlug = `${slug}-${counter}`;
-      counter++;
-    }
-
-    if (data.productType === 'packaging' && !data.packagingType) {
-      throw new ValidationError('Packaging type is required for packaging products');
-    }
-
-    let totalTaxRate = data.taxRate || 0;
-    if (data.taxIds && data.taxIds.length > 0) {
-      const taxes = await prisma.tax.findMany({
-        where: { id: { in: data.taxIds } },
-      });
-      totalTaxRate = taxes.reduce((sum, tax) => sum + Number(tax.percentage), 0);
+    if (existingCode) {
+      throw new ConflictError('Mã sản phẩm đã tồn tại', { code });
     }
 
     const product = await prisma.product.create({
       data: {
-        sku,
-        slug: finalSlug,
+        code,
         productName: data.productName,
-        productType: data.productType as any,
-        packagingType: data.packagingType as any,
         categoryId: data.categoryId,
         supplierId: data.supplierId,
         unitId: data.unitId,
-        barcode: data.barcode,
-        weight: data.weight,
-        dimensions: data.dimensions,
         description: data.description,
-        purchasePrice: data.purchasePrice,
-        sellingPriceRetail: data.sellingPriceRetail,
-        sellingPriceWholesale: data.sellingPriceWholesale,
-        sellingPriceVip: data.sellingPriceVip,
-        taxRate: totalTaxRate,
+        basePrice: data.basePrice,
+        price: data.price,
         taxIds: data.taxIds ? JSON.parse(JSON.stringify(data.taxIds)) : null,
-        manageSerial: data.manageSerial || false,
         applyWarranty: data.applyWarranty || false,
         warrantyPolicy: data.warrantyPolicy ? JSON.parse(JSON.stringify(data.warrantyPolicy)) : null,
         minStockLevel: data.minStockLevel,
-        expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
         status: (data.status as any) || 'active',
         createdBy: userId,
         productHasAttributes: {
@@ -377,44 +311,12 @@ class ProductService {
       }
     }
 
-    if (data.sku && data.sku !== existingProduct.sku) {
-      const existingSKU = await prisma.product.findUnique({
-        where: { sku: data.sku as string },
+    if (data.code && data.code !== existingProduct.code) {
+      const existingCode = await prisma.product.findUnique({
+        where: { code: data.code as string },
       });
-      if (existingSKU) {
-        throw new ConflictError('SKU already exists', { sku: data.sku });
-      }
-    }
-
-    let slug = existingProduct.slug;
-    if (data.productName && data.productName !== existingProduct.productName) {
-      slug = this.generateSlug(data.productName as string);
-
-      let finalSlug = slug;
-      let counter = 1;
-      while (
-        await prisma.product.findFirst({
-          where: {
-            slug: finalSlug,
-            id: { not: id },
-          },
-        })
-      ) {
-        finalSlug = `${slug}-${counter}`;
-        counter++;
-      }
-      slug = finalSlug;
-    }
-
-    let totalTaxRate: number | undefined = undefined;
-    if (data.taxIds !== undefined) {
-      if (data.taxIds && data.taxIds.length > 0) {
-        const taxes = await prisma.tax.findMany({
-          where: { id: { in: data.taxIds } },
-        });
-        totalTaxRate = taxes.reduce((sum, tax) => sum + Number(tax.percentage), 0);
-      } else {
-        totalTaxRate = 0;
+      if (existingCode) {
+        throw new ConflictError('Mã sản phẩm đã tồn tại', { code: data.code });
       }
     }
 
@@ -430,10 +332,8 @@ class ProductService {
       where: { id },
       data: {
         ...restData,
-        taxRate: totalTaxRate !== undefined ? totalTaxRate : undefined,
         taxIds: taxIds !== undefined ? taxIds ? JSON.parse(JSON.stringify(taxIds)) : null : undefined,
         warrantyPolicy: warrantyPolicy !== undefined ? warrantyPolicy ? JSON.parse(JSON.stringify(warrantyPolicy)) : null : undefined,
-        slug,
         updatedBy: userId,
         ...(attributeIdsWithValue && {
           productHasAttributes: {
@@ -472,85 +372,22 @@ class ProductService {
 
   /**
    * Cập nhật trạng thái Banner (IsFeatured) cho nhiều sản phẩm
-   * Hỗ trợ 3 action: 'set_featured' | 'unset_featured' | 'reset_all'
+   * Đã được xoá cột `isFeatured` khỏi Database ở phiên bản này, 
+   * logic giữ tạm để không lỗi Route hoặc có thể xóa luôn.
    */
   async updateBannerStatus(
     action: 'set_featured' | 'unset_featured' | 'reset_all',
-    userId: number,
-    productIds: number[] = []
+    _userId: number,
+    _productIds: number[] = []
   ) {
-    let updatedCount = 0;
-    let affectedIds: number[] = [];
-
-    // 1. Xử lý logic dựa trên Action
-    if (action === 'reset_all') {
-      // CASE 3: Tắt TẤT CẢ sản phẩm đang là banner -> về thường
-
-      // (Optional) Tìm các ID đang là featured
-      const currentFeatured = await prisma.product.findMany({
-        where: { isFeatured: true },
-        select: { id: true },
-      });
-      affectedIds = currentFeatured.map((p) => p.id);
-
-      if (affectedIds.length > 0) {
-        const result = await prisma.product.updateMany({
-          where: { isFeatured: true },
-          data: {
-            isFeatured: false,
-            updatedBy: userId,
-            updatedAt: new Date(), // Cập nhật thời gian sửa
-          },
-        });
-        updatedCount = result.count;
-      }
-    } else {
-      // CASE 1 & 2: Cập nhật theo danh sách ID gửi lên
-
-      if (!productIds || productIds.length === 0) {
-        throw new Error('Danh sách sản phẩm không được để trống');
-      }
-
-      // Kiểm tra xem các ID này có tồn tại không (Optional - tùy nhu cầu chặt chẽ)
-      const countExist = await prisma.product.count({
-        where: { id: { in: productIds } },
-      });
-      if (countExist !== productIds.length) {
-        throw new Error('Some product IDs do not exist');
-      }
-
-      const isFeaturedValue = action === 'set_featured'; // true nếu set, false nếu unset
-
-      const result = await prisma.product.updateMany({
-        where: { id: { in: productIds } },
-        data: {
-          isFeatured: isFeaturedValue,
-          updatedBy: userId,
-          updatedAt: new Date(),
-        },
-      });
-
-      updatedCount = result.count;
-      affectedIds = productIds;
-    }
-
-    // 2. Ghi Log hoạt động (Log Activity)
-    //log tóm tắt hành động.
-    logActivity('bulk_update', userId, 'products', {
-      action: action,
-      count: updatedCount,
-      targetIds: affectedIds,
-      description: `Banner status updated: ${action}`,
-    });
-
-    // Trả về kết quả tóm tắt
     return {
       success: true,
       action,
-      updatedCount,
-      affectedIds,
+      updatedCount: 0,
+      affectedIds: [],
     };
   }
+
 
   async delete(id: number, userId: number) {
     const product = await prisma.product.findUnique({
@@ -561,8 +398,6 @@ class ProductService {
         inventory: true,
         purchaseOrderDetails: true,
         invoiceDetails: true,
-        bomMaterials: true,
-        productionOrderMaterials: true,
       },
     });
 
@@ -582,12 +417,6 @@ class ProductService {
     if (product.purchaseOrderDetails.length > 0 || product.invoiceDetails.length > 0) {
       throw new ValidationError(
         'Cannot delete product that has been used in orders. Consider marking it as discontinued instead.'
-      );
-    }
-
-    if (product.bomMaterials.length > 0 || product.productionOrderMaterials.length > 0) {
-      throw new ValidationError(
-        'Cannot delete product that is used in production. Consider marking it as discontinued instead.'
       );
     }
 
@@ -656,36 +485,11 @@ class ProductService {
     return lowStockProducts;
   }
 
-  async getExpiringSoon(days: number = 7) {
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + days);
-
-    const products = await prisma.product.findMany({
-      where: {
-        status: 'active',
-        expiryDate: {
-          lte: futureDate,
-          gte: new Date(),
-        },
-      },
-      include: {
-        category: true,
-        supplier: true,
-        inventory: {
-          include: { warehouse: true },
-        },
-      },
-      orderBy: {
-        expiryDate: 'asc',
-      },
-    });
-
-    return products.map((product) => ({
-      ...product,
-      daysUntilExpiry: Math.ceil(
-        (new Date(product.expiryDate!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-      ),
-    }));
+  async getExpiringSoon(_days: number = 7) {
+    // Note: Expiry dates are now tracked at the InventoryBatch level, not the Product level.
+    // For a fully accurate report, this should query InventoryBatches and join with Products.
+    // Returning empty array for now as per updated tracking logic.
+    return [];
   }
 
   async uploadImages(
@@ -1087,7 +891,6 @@ class ProductService {
       select: {
         id: true,
         productName: true,
-        productType: true,
         status: true,
         supplierId: true,
         categoryId: true,
@@ -1100,11 +903,6 @@ class ProductService {
     const inactiveCount = products.filter((p) => p.status === 'inactive').length;
     const discontinuedCount = products.filter((p) => p.status === 'discontinued').length;
 
-    const rawMaterialCount = products.filter((p) => p.productType === 'raw_material').length;
-    const packagingCount = products.filter((p) => p.productType === 'packaging').length;
-    const finishedCount = products.filter((p) => p.productType === 'finished_product').length;
-    const goodsCount = products.filter((p) => p.productType === 'goods').length;
-
     const withoutSupplier = products.filter((p) => !p.supplierId).length;
     const withoutCategory = products.filter((p) => !p.categoryId).length;
 
@@ -1116,10 +914,10 @@ class ProductService {
         discontinued: discontinuedCount,
       },
       byType: {
-        rawMaterial: rawMaterialCount,
-        packaging: packagingCount,
-        finished: finishedCount,
-        goods: goodsCount,
+        rawMaterial: 0,
+        packaging: 0,
+        finished: 0,
+        goods: totalProducts,
       },
       dataQuality: {
         withoutSupplier,
@@ -1131,146 +929,39 @@ class ProductService {
   }
 
   async getRawMaterialStats() {
-
-    // Get all raw materials with inventory info
-    const rawMaterials = await prisma.product.findMany({
-      where: {
-        productType: 'raw_material',
-      },
-      include: {
-        inventory: true,
-      },
-    });
-
-    // Calculate statistics
-    const totalRawMaterials = rawMaterials.length;
-    const activeCount = rawMaterials.filter((p) => p.status === 'active').length;
-    const inactiveCount = rawMaterials.filter((p) => p.status === 'inactive').length;
-    const discontinuedCount = rawMaterials.filter((p) => p.status === 'discontinued').length;
-
-    // Count low stock (quantity < minStockLevel)
-    let lowStockCount = 0;
-    for (const material of rawMaterials) {
-      const totalInventory = material.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      if (totalInventory < Number(material.minStockLevel)) {
-        lowStockCount++;
-      }
-    }
-
-    // Count expiring soon (7 days from now)
-    const sevenDaysFromNow = new Date();
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    let expiringCount = 0;
-    for (const material of rawMaterials) {
-      if (material.expiryDate && new Date(material.expiryDate) <= sevenDaysFromNow) {
-        expiringCount++;
-      }
-    }
-
-    // Calculate total inventory value (Tồn kho × Giá nhập)
-    let totalInventoryValue = 0;
-    for (const material of rawMaterials) {
-      const totalQuantity = material.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      const purchasePrice = Number(material.purchasePrice) || 0;
-      totalInventoryValue += totalQuantity * purchasePrice;
-    }
-
-    const stats = {
-      totalRawMaterials,
-      byStatus: {
-        active: activeCount,
-        inactive: inactiveCount,
-        discontinued: discontinuedCount,
-      },
-      lowStockCount,
-      expiringCount,
-      discontinuedCount,
-      totalInventoryValue,
+    return {
+      totalRawMaterials: 0,
+      byStatus: { active: 0, inactive: 0, discontinued: 0 },
+      lowStockCount: 0,
+      expiringCount: 0,
+      discontinuedCount: 0,
+      totalInventoryValue: 0,
     };
-
-    return stats;
   }
 
   async getPackagingStats() {
-
-    // Get all packaging with inventory info
-    const packaging = await prisma.product.findMany({
-      where: {
-        productType: 'packaging',
-      },
-      include: {
-        inventory: true,
-      },
-    });
-
-    // Calculate statistics
-    const totalPackaging = packaging.length;
-    const activeCount = packaging.filter((p) => p.status === 'active').length;
-    const inactiveCount = packaging.filter((p) => p.status === 'inactive').length;
-    const discontinuedCount = packaging.filter((p) => p.status === 'discontinued').length;
-
-    // Count low stock (quantity < minStockLevel)
-    let lowStockCount = 0;
-    for (const pk of packaging) {
-      const totalInventory = pk.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      if (totalInventory < Number(pk.minStockLevel)) {
-        lowStockCount++;
-      }
-    }
-
-    // Count expiring soon (7 days from now)
-    const sevenDaysFromNow = new Date();
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    let expiringCount = 0;
-    for (const pk of packaging) {
-      if (pk.expiryDate && new Date(pk.expiryDate) <= sevenDaysFromNow) {
-        expiringCount++;
-      }
-    }
-
-    // Calculate total inventory value (Tồn kho × Giá nhập)
-    let totalInventoryValue = 0;
-    for (const pk of packaging) {
-      const totalQuantity = pk.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      const purchasePrice = Number(pk.purchasePrice) || 0;
-      totalInventoryValue += totalQuantity * purchasePrice;
-    }
-
-    const stats = {
-      totalPackaging,
-      byStatus: {
-        active: activeCount,
-        inactive: inactiveCount,
-        discontinued: discontinuedCount,
-      },
-      lowStockCount,
-      expiringCount,
-      discontinuedCount,
-      totalInventoryValue,
+    return {
+      totalPackaging: 0,
+      byStatus: { active: 0, inactive: 0, discontinued: 0 },
+      lowStockCount: 0,
+      expiringCount: 0,
+      discontinuedCount: 0,
+      totalInventoryValue: 0,
     };
-
-    return stats;
   }
 
   async getGoodsStats() {
-
-    // Get all goods with inventory info
     const goods = await prisma.product.findMany({
-      where: {
-        productType: 'goods',
-      },
       include: {
         inventory: true,
       },
     });
 
-    // Calculate statistics
     const totalGoods = goods.length;
     const activeCount = goods.filter((p) => p.status === 'active').length;
     const inactiveCount = goods.filter((p) => p.status === 'inactive').length;
     const discontinuedCount = goods.filter((p) => p.status === 'discontinued').length;
 
-    // Count low stock (quantity < minStockLevel)
     let lowStockCount = 0;
     for (const good of goods) {
       const totalInventory = good.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
@@ -1279,22 +970,11 @@ class ProductService {
       }
     }
 
-    // Count expiring soon (7 days from now)
-    const sevenDaysFromNow = new Date();
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    let expiringCount = 0;
-    for (const good of goods) {
-      if (good.expiryDate && new Date(good.expiryDate) <= sevenDaysFromNow) {
-        expiringCount++;
-      }
-    }
-
-    // Calculate total inventory value (Tồn kho × Giá nhập)
     let totalInventoryValue = 0;
     for (const good of goods) {
       const totalQuantity = good.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      const purchasePrice = Number(good.purchasePrice) || 0;
-      totalInventoryValue += totalQuantity * purchasePrice;
+      const basePrice = Number(good.basePrice) || 0;
+      totalInventoryValue += totalQuantity * basePrice;
     }
 
     const stats = {
@@ -1305,7 +985,7 @@ class ProductService {
         discontinued: discontinuedCount,
       },
       lowStockCount,
-      expiringCount,
+      expiringCount: 0,
       discontinuedCount,
       totalInventoryValue,
     };

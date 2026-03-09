@@ -126,7 +126,7 @@ class MaterialService {
                         product: {
                             select: {
                                 id: true,
-                                sku: true,
+                                code: true,
                                 productName: true,
                             },
                         },

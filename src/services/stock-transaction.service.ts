@@ -203,9 +203,8 @@ class StockTransactionService {
             product: {
               select: {
                 id: true,
-                sku: true,
+                code: true,
                 productName: true,
-                productType: true,
                 unit: true,
               },
             },
@@ -703,8 +702,7 @@ class StockTransactionService {
 
       const newQuantity = (current ? Number(current.quantity) : 0) + Number(detail.quantity);
 
-      // Tăng số lượng tồn kho trong Inventory
-      await tx.inventory.upsert({
+      const inventory = await tx.inventory.upsert({
         where: {
           warehouseId_productId: {
             warehouseId: transaction.warehouseId,
@@ -723,6 +721,32 @@ class StockTransactionService {
           updatedBy: userId,
         },
       });
+
+      // Cập nhật lô hàng (InventoryBatch) cho FEFO/FIFO nếu có số lô và HSD
+      if (detail.batchNumber && detail.expiryDate) {
+        await tx.inventoryBatch.upsert({
+          where: {
+            inventoryId_batchNumber_expiryDate: {
+              inventoryId: inventory.id,
+              batchNumber: detail.batchNumber,
+              expiryDate: new Date(detail.expiryDate),
+            },
+          },
+          create: {
+            inventoryId: inventory.id,
+            warehouseId: transaction.warehouseId,
+            productId: detail.productId,
+            batchNumber: detail.batchNumber,
+            expiryDate: new Date(detail.expiryDate),
+            quantity: Number(detail.quantity),
+            updatedBy: userId,
+          },
+          update: {
+            quantity: { increment: Number(detail.quantity) },
+            updatedBy: userId,
+          },
+        });
+      }
 
       // Cập nhật giá nhập mới nhất vào Product
       if (detail.unitPrice) {
@@ -1257,7 +1281,7 @@ class StockTransactionService {
         product: {
           select: {
             id: true,
-            sku: true,
+            code: true,
             productName: true,
             unitId: true,
             unit: { select: { unitCode: true, unitName: true } },
@@ -1329,7 +1353,7 @@ class StockTransactionService {
     return {
       product: {
         id: product.id,
-        sku: product.sku,
+        code: product.code,
         productName: product.productName,
         unit: (product.unit as any)?.unitName || '',
       },

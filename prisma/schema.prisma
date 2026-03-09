@@ -75,8 +75,8 @@ model Warehouse {
   toStockTransfers        StockTransfer[]          @relation("ToWarehouse")
   invoices                Invoice[]
   invoiceDetails          InvoiceDetail[]
-  productionOrders        ProductionOrder[]
   stockTransactionDetails StockTransactionDetail[]
+  inventoryBatches        InventoryBatch[]
 
   @@index([warehouseType, status])
   @@map("warehouses")
@@ -130,11 +130,6 @@ model User {
   stockTransfers             StockTransfer[]    @relation("TransferRequester")
   stockTransfersApproved     StockTransfer[]    @relation("TransferApprover")
   stockTransfersCancelled    StockTransfer[]    @relation("TransferCanceller")
-  boms                       Bom[]              @relation("BomCreator")
-  bomsApproved               Bom[]              @relation("BomApprover")
-  productionOrders           ProductionOrder[]  @relation("ProductionCreator")
-  productionOrdersApproved   ProductionOrder[]  @relation("ProductionApprover")
-  productionOrdersCancelled  ProductionOrder[]  @relation("ProductionCanceller")
   customers                  Customer[]         @relation("CustomerCreator")
   customersUpdated           Customer[]         @relation("CustomerUpdater")
   invoices                   Invoice[]          @relation("SalesCreator")
@@ -194,6 +189,7 @@ model User {
   updatedTaxes            Tax[]              @relation("TaxUpdater")
   createdAttributes       Attribute[]        @relation("AttributeCreator")
   updatedAttributes       Attribute[]        @relation("AttributeUpdater")
+  inventoryBatches        InventoryBatch[]
 
   @@index([roleId, status])
   @@map("users")
@@ -368,37 +364,25 @@ model PurchaseOrderDetail {
 }
 
 model Product {
-  id                    Int            @id @default(autoincrement())
-  sku                   String         @unique @db.VarChar(50)
-  slug                  String?        @unique @db.VarChar(200)
-  productName           String         @map("product_name") @db.VarChar(200)
-  productType           ProductType    @map("product_type")
-  packagingType         PackagingType? @default(other) @map("packaging_type")
-  categoryId            Int?           @map("category_id")
-  supplierId            Int?           @map("supplier_id")
-  unitId                Int?           @map("unit_id")
-  barcode               String?        @db.VarChar(100)
-  weight                Decimal?       @db.Decimal(15, 2)
-  dimensions            String?        @db.VarChar(100)
-  description           String?        @db.VarChar(500)
-  purchasePrice         Decimal?       @map("purchase_price") @db.Decimal(15, 2)
-  sellingPriceRetail    Decimal?       @map("selling_price_retail") @db.Decimal(15, 2)
-  sellingPriceWholesale Decimal?       @map("selling_price_wholesale") @db.Decimal(15, 2)
-  sellingPriceVip       Decimal?       @map("selling_price_vip") @db.Decimal(15, 2)
-  taxRate               Decimal        @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  taxIds                Json?          @map("tax_ids")
-  manageSerial          Boolean        @default(false) @map("manage_serial")
-  applyWarranty         Boolean        @default(false) @map("apply_warranty")
-  warrantyPolicy        Json?          @map("warranty_policy")
-  minStockLevel         Decimal        @default(0) @map("min_stock_level") @db.Decimal(15, 2)
-  expiryDate            DateTime?      @map("expiry_date") @db.Date
-  status                ProductStatus  @default(active)
-  createdBy             Int?           @map("created_by")
-  isFeatured            Boolean        @default(false) @map("is_featured")
-  updatedBy             Int?           @map("updated_by")
-  createdAt             DateTime       @default(now()) @map("created_at")
-  updatedAt             DateTime       @updatedAt @map("updated_at")
-  deletedAt             DateTime?      @map("deleted_at")
+  id             Int           @id @default(autoincrement())
+  code           String        @unique @db.VarChar(50)
+  productName    String        @map("product_name") @db.VarChar(200)
+  categoryId     Int?          @map("category_id")
+  supplierId     Int?          @map("supplier_id")
+  unitId         Int?          @map("unit_id")
+  description    String?       @db.VarChar(500)
+  basePrice      Decimal?      @map("purchase_price") @db.Decimal(15, 2)
+  price          Decimal?      @map("selling_price_retail") @db.Decimal(15, 2)
+  taxIds         Json?         @map("tax_ids")
+  applyWarranty  Boolean       @default(false) @map("apply_warranty")
+  warrantyPolicy Json?         @map("warranty_policy")
+  minStockLevel  Decimal       @default(0) @map("min_stock_level") @db.Decimal(15, 2)
+  status         ProductStatus @default(active)
+  createdBy      Int?          @map("created_by")
+  updatedBy      Int?          @map("updated_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
 
   category Category? @relation(fields: [categoryId], references: [id])
   supplier Supplier? @relation(fields: [supplierId], references: [id])
@@ -406,32 +390,27 @@ model Product {
   creator  User?     @relation("ProductCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   updater  User?     @relation("ProductUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
-  images                   ProductImage[]
-  videos                   ProductVideo[]
-  purchaseOrderDetails     PurchaseOrderDetail[]
-  inventory                Inventory[]
-  stockTransactionDetails  StockTransactionDetail[]
-  stockTransferDetails     StockTransferDetail[]
-  boms                     Bom[]
-  bomMaterials             BomMaterial[]
-  productionOrders         ProductionOrder[]
-  productionOrderMaterials ProductionOrderMaterial[]
-  invoiceDetails           InvoiceDetail[]
-  promotionProducts        PromotionProduct[]
-  promotionGifts           PromotionProduct[]        @relation("GiftProduct")
-  materials                ProductMaterial[]
-  expiries                 Expiry[]
-  productHasAttributes     ProductHasAttribute[]
-  unitConversions          ProductUnitConversion[]
+  images                  ProductImage[]
+  videos                  ProductVideo[]
+  purchaseOrderDetails    PurchaseOrderDetail[]
+  inventory               Inventory[]
+  stockTransactionDetails StockTransactionDetail[]
+  stockTransferDetails    StockTransferDetail[]
+  invoiceDetails          InvoiceDetail[]
+  promotionProducts       PromotionProduct[]
+  promotionGifts          PromotionProduct[]       @relation("GiftProduct")
+  materials               ProductMaterial[]
+  expiries                Expiry[]
+  productHasAttributes    ProductHasAttribute[]
+  unitConversions         ProductUnitConversion[]
+  inventoryBatches        InventoryBatch[]
 
-  @@index([sku])
+  @@index([code])
   @@index([categoryId])
   @@index([supplierId])
   @@index([unitId])
-  @@index([productType])
   @@index([status])
   @@index([productName])
-  @@index([isFeatured])
   @@map("products")
 }
 
@@ -490,10 +469,38 @@ model Inventory {
   product   Product   @relation(fields: [productId], references: [id])
   updater   User?     @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
 
+  batches InventoryBatch[]
+
   @@unique([warehouseId, productId])
   @@index([warehouseId, productId])
   @@index([quantity])
   @@map("inventory")
+}
+
+model InventoryBatch {
+  id               Int      @id @default(autoincrement())
+  inventoryId      Int      @map("inventory_id")
+  warehouseId      Int      @map("warehouse_id")
+  productId        Int      @map("product_id")
+  batchNumber      String   @map("batch_number") @db.VarChar(100)
+  expiryDate       DateTime @map("expiry_date") @db.Date
+  quantity         Decimal  @default(0) @db.Decimal(15, 2)
+  reservedQuantity Decimal  @default(0) @map("reserved_quantity") @db.Decimal(15, 2)
+  lastUpdated      DateTime @default(now()) @updatedAt @map("last_updated")
+  updatedBy        Int?     @map("updated_by")
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  updater   User?     @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  stockTransactionDetails StockTransactionDetail[] // Link back to transactions
+  invoiceDetails          InvoiceBatchDetail[] // Link back to sales
+
+  @@unique([inventoryId, batchNumber, expiryDate])
+  @@index([warehouseId, productId, batchNumber])
+  @@index([expiryDate])
+  @@map("inventory_batches")
 }
 
 model StockTransaction {
@@ -524,8 +531,7 @@ model StockTransaction {
   approver             User?      @relation("TransactionApprover", fields: [approvedBy], references: [id])
   canceller            User?      @relation("TransactionCanceller", fields: [cancelledBy], references: [id])
 
-  details                  StockTransactionDetail[]
-  productionOrderMaterials ProductionOrderMaterial[]
+  details StockTransactionDetail[]
 
   @@index([transactionCode])
   @@index([transactionType])
@@ -545,9 +551,11 @@ model StockTransactionDetail {
   expiryDate    DateTime? @map("expiry_date") @db.Date
   notes         String?   @db.VarChar(500)
 
-  transaction StockTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  product     Product          @relation(fields: [productId], references: [id])
-  warehouse   Warehouse?       @relation(fields: [warehouseId], references: [id])
+  transaction      StockTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product          Product          @relation(fields: [productId], references: [id])
+  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id])
+  inventoryBatch   InventoryBatch?  @relation(fields: [inventoryBatchId], references: [id])
+  inventoryBatchId Int?
 
   @@index([transactionId])
   @@index([productId])
@@ -603,113 +611,6 @@ model StockTransferDetail {
   @@index([transferId])
   @@index([productId])
   @@map("stock_transfer_details")
-}
-
-// =====================================================
-// 3. PRODUCTION MANAGEMENT
-// =====================================================
-
-model Bom {
-  id                Int       @id @default(autoincrement())
-  bomCode           String    @unique @map("bom_code") @db.VarChar(50)
-  finishedProductId Int       @map("finished_product_id")
-  version           String    @default("1.0") @db.VarChar(20)
-  outputQuantity    Decimal   @map("output_quantity") @db.Decimal(15, 2)
-  efficiencyRate    Decimal   @default(100) @map("efficiency_rate") @db.Decimal(5, 2)
-  productionTime    Int?      @map("production_time")
-  status            BomStatus @default(draft)
-  notes             String?   @db.VarChar(255)
-  createdBy         Int       @map("created_by")
-  approvedBy        Int?      @map("approved_by")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  approvedAt        DateTime? @map("approved_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  deletedAt         DateTime? @map("deleted_at")
-
-  finishedProduct Product @relation(fields: [finishedProductId], references: [id])
-  creator         User    @relation("BomCreator", fields: [createdBy], references: [id])
-  approver        User?   @relation("BomApprover", fields: [approvedBy], references: [id])
-
-  materials        BomMaterial[]
-  productionOrders ProductionOrder[]
-
-  @@index([bomCode])
-  @@index([finishedProductId])
-  @@map("bom")
-}
-
-model BomMaterial {
-  id           Int          @id @default(autoincrement())
-  bomId        Int          @map("bom_id")
-  materialId   Int          @map("material_id")
-  quantity     Decimal      @db.Decimal(15, 2)
-  unit         String?      @db.VarChar(50)
-  materialType MaterialType @map("material_type")
-  notes        String?      @db.VarChar(255)
-
-  bom      Bom     @relation(fields: [bomId], references: [id], onDelete: Cascade)
-  material Product @relation(fields: [materialId], references: [id])
-
-  @@index([bomId])
-  @@map("bom_materials")
-}
-
-model ProductionOrder {
-  id                Int              @id @default(autoincrement())
-  orderCode         String           @unique @map("order_code") @db.VarChar(50)
-  bomId             Int              @map("bom_id")
-  finishedProductId Int              @map("finished_product_id")
-  warehouseId       Int?             @map("warehouse_id")
-  plannedQuantity   Decimal          @map("planned_quantity") @db.Decimal(15, 2)
-  actualQuantity    Decimal          @default(0) @map("actual_quantity") @db.Decimal(15, 2)
-  productionCost    Decimal          @default(0) @map("production_cost") @db.Decimal(15, 2)
-  startDate         DateTime         @map("start_date") @db.Date
-  endDate           DateTime?        @map("end_date") @db.Date
-  status            ProductionStatus @default(pending)
-  notes             String?          @db.VarChar(255)
-  createdBy         Int              @map("created_by")
-  approvedBy        Int?             @map("approved_by")
-  cancelledBy       Int?             @map("cancelled_by")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  approvedAt        DateTime?        @map("approved_at")
-  completedAt       DateTime?        @map("completed_at")
-  cancelledAt       DateTime?        @map("cancelled_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
-  deletedAt         DateTime?        @map("deleted_at")
-
-  bom             Bom        @relation(fields: [bomId], references: [id])
-  finishedProduct Product    @relation(fields: [finishedProductId], references: [id])
-  warehouse       Warehouse? @relation(fields: [warehouseId], references: [id])
-  creator         User       @relation("ProductionCreator", fields: [createdBy], references: [id])
-  approver        User?      @relation("ProductionApprover", fields: [approvedBy], references: [id])
-  canceller       User?      @relation("ProductionCanceller", fields: [cancelledBy], references: [id])
-
-  materials ProductionOrderMaterial[]
-
-  @@index([orderCode])
-  @@index([status])
-  @@index([startDate])
-  @@map("production_orders")
-}
-
-model ProductionOrderMaterial {
-  id                 Int          @id @default(autoincrement())
-  productionOrderId  Int          @map("production_order_id")
-  materialId         Int          @map("material_id")
-  plannedQuantity    Decimal      @map("planned_quantity") @db.Decimal(15, 2)
-  actualQuantity     Decimal      @default(0) @map("actual_quantity") @db.Decimal(15, 2)
-  wastage            Decimal      @default(0) @db.Decimal(15, 2)
-  unitPrice          Decimal      @default(0) @map("unit_price") @db.Decimal(15, 2)
-  materialType       MaterialType @map("material_type")
-  stockTransactionId Int?         @map("stock_transaction_id")
-  notes              String?      @db.VarChar(255)
-
-  productionOrder  ProductionOrder   @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
-  material         Product           @relation(fields: [materialId], references: [id])
-  stockTransaction StockTransaction? @relation(fields: [stockTransactionId], references: [id])
-
-  @@index([productionOrderId])
-  @@map("production_order_materials")
 }
 
 // =====================================================
@@ -909,9 +810,25 @@ model InvoiceDetail {
   product   Product    @relation(fields: [productId], references: [id])
   warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
 
+  batches InvoiceBatchDetail[] // Link to batches used to fulfill this detail
+
   @@index([orderId])
   @@index([productId])
   @@map("invoice_details")
+}
+
+model InvoiceBatchDetail {
+  id               Int     @id @default(autoincrement())
+  invoiceDetailId  Int     @map("invoice_detail_id")
+  inventoryBatchId Int     @map("inventory_batch_id")
+  quantity         Decimal @db.Decimal(15, 2)
+
+  invoiceDetail  InvoiceDetail  @relation(fields: [invoiceDetailId], references: [id], onDelete: Cascade)
+  inventoryBatch InventoryBatch @relation(fields: [inventoryBatchId], references: [id])
+
+  @@index([invoiceDetailId])
+  @@index([inventoryBatchId])
+  @@map("invoice_batch_details")
 }
 
 model Delivery {
@@ -1440,21 +1357,6 @@ enum PurchaseOrderStatus {
   cancelled
 }
 
-enum ProductType {
-  raw_material
-  packaging
-  finished_product
-  goods
-}
-
-enum PackagingType {
-  bottle
-  box
-  bag
-  label
-  other
-}
-
 enum ProductStatus {
   active
   inactive
@@ -1499,22 +1401,9 @@ enum TransferStatus {
   cancelled
 }
 
-enum BomStatus {
-  draft
-  active
-  inactive
-}
-
 enum MaterialType {
   raw_material
   packaging
-}
-
-enum ProductionStatus {
-  pending
-  in_progress
-  completed
-  cancelled
 }
 
 enum CustomerType {
