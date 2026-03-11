@@ -390,6 +390,35 @@ class PromotionController {
     }
   }
 
+  // GET /api/promotions/for-cart - Get applicable promotions for specific cart
+  async getForCart(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const { productIds, customerId } = req.query;
+      const ids = productIds
+        ? String(productIds).split(',').map(Number).filter(Boolean)
+        : [];
+      const cId = customerId ? parseInt(String(customerId)) : undefined;
+
+      const result = await promotionService.getForCart(ids, cId);
+
+      res.json({
+        success: true,
+        data: result,
+        count: result.length,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({
+        success: false,
+        error: {
+          code: error.code || 'INTERNAL_ERROR',
+          message: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+  }
+
   // GET /api/promotions/active - Get active promotions
   async getActive(req: AuthRequest, res: Response): Promise<void> {
     try {

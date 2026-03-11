@@ -20,6 +20,7 @@ export interface ApplyPromotionResult {
   giftProducts?: {
     productId: number;
     quantity: number;
+    productName: string;
   }[];
   message?: string;
 }

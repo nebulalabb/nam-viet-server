@@ -775,6 +775,92 @@ class PromotionService {
     return promotions;
   }
 
+  // Get applicable promotions for a specific cart
+  async getForCart(productIds: number[], customerId?: number) {
+    const now = new Date();
+
+    const allActive = await prisma.promotion.findMany({
+      where: {
+        status: 'active',
+        startDate: { lte: now },
+        endDate: { gte: now },
+        deletedAt: null,
+        AND: [
+          {
+            OR: [
+              { quantityLimit: null },
+              { usageCount: { lt: prisma.promotion.fields.quantityLimit as any } }
+            ]
+          }
+        ]
+      },
+      include: {
+        products: {
+          include: {
+            product: { select: { id: true, productName: true, code: true } },
+            giftProduct: { select: { id: true, productName: true, code: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Filter by usage limit manually (Prisma doesn't support column comparison in where)
+    const notExhausted = allActive.filter(
+      (p) => p.quantityLimit == null || p.usageCount < p.quantityLimit
+    );
+
+    // Filter by applicability to cart items
+    const applicable = notExhausted.filter((promotion) => {
+      const at = promotion.applicableTo as string;
+      switch (at) {
+        case 'all':
+          return true;
+
+        case 'specific_products': {
+          const promoProductIds = promotion.products.map((pp) => pp.productId);
+          return productIds.some((pid) => promoProductIds.includes(pid));
+        }
+
+        case 'specific_customer':
+        case 'customer_group': {
+          if (!customerId) return false;
+          const conditions = promotion.conditions as any;
+          if (!conditions) return true;
+          if (conditions.customer_ids) {
+            return conditions.customer_ids.includes(customerId);
+          }
+          return true;
+        }
+
+        case 'product_group': {
+          return true;
+        }
+
+        default:
+          return true;
+      }
+    });
+
+    // Annotate each promotion with which cart products it matches
+    const result = applicable.map((promotion) => {
+      const at = promotion.applicableTo as string;
+      const matchingProductIds =
+        at === 'specific_products'
+          ? productIds.filter((pid) =>
+              promotion.products.some((pp) => pp.productId === pid)
+            )
+          : productIds;
+
+      return {
+        ...promotion,
+        _matchingProductIds: matchingProductIds,
+      };
+    });
+
+    return result;
+  }
+
   // Apply promotion to order
   async apply(id: number, data: ApplyPromotionInput): Promise<ApplyPromotionResult> {
     const promotion = await prisma.promotion.findUnique({
@@ -928,7 +1014,7 @@ class PromotionService {
   // Calculate discount amount
   private calculateDiscount(promotion: any, data: ApplyPromotionInput): ApplyPromotionResult {
     let discountAmount = 0;
-    const giftProducts: { productId: number; quantity: number }[] = [];
+    const giftProducts: { productId: number; quantity: number; productName: string }[] = [];
 
     switch (promotion.promotionType) {
       case 'buy_x_get_y': {
@@ -949,12 +1035,14 @@ class PromotionService {
                 giftProducts.push({
                   productId: item.productId,
                   quantity: giftQty,
+                  productName: productPromo.product?.productName || `SP#${item.productId}`,
                 });
               } else if (productPromo.giftProductId) {
                 // Gift is different product
                 giftProducts.push({
                   productId: productPromo.giftProductId,
                   quantity: giftQty,
+                  productName: productPromo.giftProduct?.productName || `SP#${productPromo.giftProductId}`,
                 });
               }
             }
@@ -972,6 +1060,7 @@ class PromotionService {
               giftProducts.push({
                 productId: pp.giftProductId,
                 quantity: pp.giftQuantity,
+                productName: pp.giftProduct?.productName || `SP#${pp.giftProductId}`,
               });
             }
           }

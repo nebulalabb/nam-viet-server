@@ -585,7 +585,6 @@ class CustomerService {
           paymentStatus: true,
           totalAmount: true,
           paidAmount: true,
-          salesChannel: true,
           warehouse: {
             select: {
               id: true,
@@ -701,7 +700,6 @@ class CustomerService {
       id: o.id,
       code: o.orderCode,
       date: o.orderDate,
-      type: o.salesChannel,
       status: o.paymentStatus,
       subTotal: Number(o.totalAmount) - Number(o.taxAmount) + Number(o.discountAmount),
       taxAmount: Number(o.taxAmount),

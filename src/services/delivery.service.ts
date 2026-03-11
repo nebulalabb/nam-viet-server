@@ -380,11 +380,30 @@ class DeliveryService {
           order: {
             include: {
               customer: true,
+              details: true,
             },
           },
           deliveryStaff: true,
         },
       });
+
+      // ─── Trừ tồn kho thực tế khi giao hàng thành công ─────────────────────
+      for (const detail of updatedDelivery.order.details) {
+        const warehouseId = detail.warehouseId ?? delivery.order.warehouseId;
+        if (!warehouseId) continue;
+
+        await tx.inventory.updateMany({
+          where: {
+            productId: detail.productId,
+            warehouseId,
+          },
+          data: {
+            quantity: { decrement: Number(detail.quantity) },
+            reservedQuantity: { decrement: Number(detail.quantity) },
+          },
+        });
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       await tx.invoice.update({
         where: { id: delivery.orderId },

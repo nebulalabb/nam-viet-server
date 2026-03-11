@@ -1,30 +1,68 @@
 import { z } from 'zod';
 
 export const createInvoiceSchema = z.object({
-  customerId: z.number().int().positive('ID khách hàng phải là số dương'),
+  customerId: z.union([
+    z.number().int().positive(),
+    z.string().transform((val) => Number(val)).refine((val) => val > 0, 'ID khách hàng phải là số dương')
+  ]).optional().nullable(),
   warehouseId: z.number().int().positive('ID kho phải là số dương').optional(),
   orderDate: z
     .string()
     .refine((val) => !isNaN(Date.parse(val)), 'Ngày đặt hàng không hợp lệ')
     .optional(),
+  note: z.string().optional().nullable(),
+  taxAmount: z.number().optional(),
+  amount: z.number().optional(),
+  discount: z.number().optional(),
+  subTotal: z.number().optional(),
+  totalAmount: z.number().optional(),
+  expectedDeliveryDate: z.string().optional().nullable(),
+  requireApproval: z.boolean().optional(),
   salesChannel: z.enum(['retail', 'wholesale', 'online', 'distributor']).optional(),
   isPickupOrder: z.boolean().optional(), // true = lấy ngay, false = giao hàng
-  paymentMethod: z.enum(['cash', 'transfer', 'installment', 'credit']),
+  // paymentMethod might be absent or optional now based on previous requests
+  paymentMethod: z.enum(['cash', 'transfer', 'installment', 'credit']).optional(),
   paidAmount: z.number().min(0, 'Số tiền thanh toán phải là số không âm').optional(),
   deliveryAddress: z.string().max(255).optional(),
   recipientName: z.string().max(255).optional(),
   recipientPhone: z.string().max(20).optional(),
+  promotionId: z.number().int().positive('ID khuyến mãi phải là số dương').optional(),
   discountAmount: z.number().min(0, 'Số tiền giảm giá phải là số không âm').optional(),
   shippingFee: z.number().min(0, 'Phí vận chuyển phải là số không âm').optional(),
   notes: z.string().max(255).optional(),
+  newCustomer: z.object({
+    customerName: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    address: z.string().optional(),
+    cccd: z.string().optional(),
+    issuedAt: z.string().optional().nullable(),
+    issuedBy: z.string().optional().nullable(),
+  }).optional().nullable(),
   items: z
     .array(
       z.object({
         productId: z.number().int().positive('ID sản phẩm phải là số dương'),
+        unitId: z.number().optional(),
+        unitName: z.string().optional(),
+        productName: z.string().optional(),
+        productType: z.string().optional(),
         quantity: z.number().positive('Số lượng phải là số dương'),
-        unitPrice: z.number().positive('Đơn giá phải là số dương'),
+        baseQuantity: z.number().optional(),
+        conversionFactor: z.number().optional(),
+        unitPrice: z.number().positive('Đơn giá phải là số dương').optional(),
+        price: z.number().optional(), // FE current sends price instead of unitPrice
         discountPercent: z.number().min(0).max(100, 'Phần trăm giảm giá phải từ 0-100').optional(),
-        taxRate: z.number().min(0).max(100, 'Thuế suất phải từ 0-100').optional(),
+        discountRate: z.number().optional(),
+        discountAmount: z.number().optional(),
+        taxRate: z.union([z.number(), z.string()]).optional(),
+        taxIds: z.array(z.number()).optional(),
+        taxAmount: z.number().optional(),
+        subTotal: z.number().optional(),
+        total: z.number().optional(),
+        periodMonths: z.union([z.number(), z.string()]).optional(),
+        warrantyCost: z.union([z.number(), z.string()]).optional(),
+        applyWarranty: z.boolean().optional(),
         warehouseId: z.number().int().positive().optional(),
         notes: z.string().max(255).optional(),
       })

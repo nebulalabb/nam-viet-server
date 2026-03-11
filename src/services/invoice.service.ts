@@ -3,7 +3,7 @@ import { NotFoundError, ValidationError } from '@utils/errors';
 import { logActivity } from '@utils/logger';
 import customerService from './customer.service';
 import notificationService from './notification.service';
-import inventoryService from './inventory.service';
+import promotionService from './promotion.service';
 import {
   CreateInvoiceInput,
   UpdateInvoiceInput,
@@ -33,22 +33,7 @@ class InvoiceService {
     return `DH-${dateStr}-${sequence}`;
   }
 
-  private async generateDeliveryCode(tx: any): Promise<string> {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
 
-    const count = await tx.delivery.count({
-      where: {
-        createdAt: {
-          gte: new Date(date.setHours(0, 0, 0, 0)),
-          lt: new Date(date.setHours(23, 59, 59, 999)),
-        },
-      },
-    });
-
-    const sequence = (count + 1).toString().padStart(3, '0');
-    return `GH-${dateStr}-${sequence}`;
-  }
 
   async getAll(query: InvoiceQueryInput) {
     const {
@@ -122,13 +107,6 @@ class InvoiceService {
               customerName: true,
               phone: true,
               classification: true,
-            },
-          },
-          warehouse: {
-            select: {
-              id: true,
-              warehouseName: true,
-              warehouseCode: true,
             },
           },
           creator: {
@@ -241,7 +219,6 @@ class InvoiceService {
             currentDebt: true,
           },
         },
-        warehouse: true,
         details: {
           include: {
             product: {
@@ -315,10 +292,54 @@ class InvoiceService {
   }
 
   async create(data: CreateInvoiceInput, userId: number) {
-    // Validate customer
-    const customer = await customerService.getById(data.customerId);
-    if (customer.status !== 'active') {
-      throw new ValidationError('Khách hàng phải ở trạng thái hoạt động để tạo đơn hàng');
+    let customerId = data.customerId;
+
+    let validatedCustomer: any = null;
+
+    // Handle Customer logic
+    if (customerId) {
+      validatedCustomer = await customerService.getById(Number(customerId));
+      if (validatedCustomer.status !== 'active') {
+        throw new ValidationError('Khách hàng phải ở trạng thái hoạt động để tạo đơn hàng');
+      }
+
+      // If newCustomer data is provided while customerId exists, update the customer
+      if (data.newCustomer) {
+        await prisma.customer.update({
+          where: { id: Number(customerId) },
+          data: {
+            customerName: data.newCustomer.customerName || validatedCustomer.customerName,
+            phone: data.newCustomer.phone || validatedCustomer.phone,
+            email: data.newCustomer.email || validatedCustomer.email,
+            address: data.newCustomer.address || validatedCustomer.address,
+            cccd: data.newCustomer.cccd || validatedCustomer.cccd,
+            issuedAt: data.newCustomer.issuedAt ? new Date(data.newCustomer.issuedAt) : validatedCustomer.issuedAt,
+            issuedBy: data.newCustomer.issuedBy || validatedCustomer.issuedBy,
+          }
+        });
+      }
+    } else if (data.newCustomer) {
+      // Create new customer
+      const newCust = await prisma.customer.create({
+        data: {
+          customerName: data.newCustomer.customerName || 'Khách hàng mới',
+          customerCode: `KH-${Date.now()}`,
+          customerType: 'individual',
+          phone: data.newCustomer.phone || '',
+          email: data.newCustomer.email || null,
+          address: data.newCustomer.address || null,
+          cccd: data.newCustomer.cccd || null,
+          issuedAt: data.newCustomer.issuedAt ? new Date(data.newCustomer.issuedAt) : null,
+          issuedBy: data.newCustomer.issuedBy || null,
+          classification: 'retail',
+          status: 'active',
+          createdBy: userId,
+        }
+      });
+      customerId = newCust.id;
+      validatedCustomer = newCust;
+    } else {
+       throw new ValidationError('Thông tin khách hàng không hợp lệ. Vui lòng chọn khách hàng hoặc cung cấp thông tin khách hàng mới.');
     }
 
     if (data.warehouseId) {
@@ -389,7 +410,8 @@ class InvoiceService {
       const discountPercent = item.discountPercent || 0;
       const taxRate = 0; // Tax rate no longer tied to product directly in this simplified version
 
-      const lineTotal = item.quantity * item.unitPrice;
+      const unitPrice = item.unitPrice || item.price || 0;
+      const lineTotal = item.quantity * unitPrice;
       const discountAmount = lineTotal * (discountPercent / 100);
       const taxableAmount = lineTotal - discountAmount;
       const taxAmount = taxableAmount * (Number(taxRate) / 100);
@@ -399,11 +421,57 @@ class InvoiceService {
 
       return {
         ...item,
+        unitPrice,
         taxRate: Number(taxRate),
       };
     });
 
-    const totalAmount = subtotal + (data.shippingFee || 0) - (data.discountAmount || 0);
+    // ─── PROMOTION LOGIC ──────────────────────────────────────────────────────
+    let promotionDiscountAmount = 0;
+    let giftItems: Array<typeof data.items[0] & { taxRate: number, discountPercent: number, unitPrice: number, isGift?: boolean }> = [];
+
+    if (data.promotionId) {
+      // Fetch promotion from DB and validate conditions
+      const applyResult = await promotionService.apply(data.promotionId, {
+        orderAmount: subtotal,
+        orderItems: data.items.map((item) => ({  
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice || item.price || 0, // Fallback to price or 0
+        })),
+        customerId: Number(customerId),
+      });
+
+      if (!applyResult.applicable) {
+        throw new ValidationError(applyResult.message || 'Khuyến mãi không thể áp dụng cho đơn hàng này');
+      }
+
+      promotionDiscountAmount = applyResult.discountAmount;
+
+      // Build gift product items (unitPrice = 0) to add into invoice details
+      if (applyResult.giftProducts && applyResult.giftProducts.length > 0) {
+        giftItems = applyResult.giftProducts.map((gift) => ({
+          productId: gift.productId,
+          quantity: gift.quantity,
+          unitPrice: 0,
+          discountPercent: 0,
+          taxRate: 0,
+          notes: 'Sản phẩm tặng kèm',
+          isGift: true,
+        }));
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Use promotion discount if provided; otherwise use manually entered discountAmount
+    const effectiveDiscountAmount = data.promotionId
+      ? promotionDiscountAmount
+      : (data.discountAmount || 0);
+
+    // Merge gift items into calculation list (they go to invoice details and stock export)
+    const allItemsWithCalculations = [...itemsWithCalculations, ...giftItems];
+
+    const totalAmount = subtotal + (Number(data.shippingFee) || 0) - effectiveDiscountAmount;
     const paidAmount = data.paidAmount || 0;
 
     // Validate payment amount vs total
@@ -419,40 +487,56 @@ class InvoiceService {
       paidAmount < totalAmount
     ) {
       const debtFromThisOrder = totalAmount - paidAmount;
-      const newDebt = Number(customer.currentDebt) + debtFromThisOrder;
-      if (newDebt > Number(customer.creditLimit)) {
+      const newDebt = Number(validatedCustomer?.currentDebt || 0) + debtFromThisOrder;
+      const limit = Number(validatedCustomer?.creditLimit || Infinity);
+      if (limit > 0 && newDebt > limit) {
         throw new ValidationError(
-          `Đơn hàng vượt quá hạn mức tín dụng của khách hàng. Công nợ hiện tại: ${customer.currentDebt}, Công nợ mới từ đơn hàng: ${debtFromThisOrder}, Hạn mức tín dụng: ${customer.creditLimit}`
+          `Đơn hàng vượt quá hạn mức tín dụng của khách hàng. Công nợ hiện tại: ${validatedCustomer?.currentDebt || 0}, Công nợ mới từ đơn hàng: ${debtFromThisOrder}, Hạn mức tín dụng: ${limit}`
         );
       }
     }
-
     const orderCode = await this.generateOrderCode();
+
+    // Set order status based on requireApproval
+    const initialOrderStatus = data.requireApproval ? 'pending' : 'preparing';
 
     let result: any;
 
     // Route to appropriate handler based on pickup/delivery
     if (data.isPickupOrder) {
       result = await this.createPickupOrder(
-        data,
-        itemsWithCalculations,
+        { ...data, customerId: Number(customerId) } as any,
+        allItemsWithCalculations,
         orderCode,
         totalAmount,
         paidAmount,
         userId,
-        inventoryShortages
+        inventoryShortages,
+        effectiveDiscountAmount,
+        initialOrderStatus
       );
     } else {
       result = await this.createDeliveryOrder(
-        data,
-        itemsWithCalculations,
+        { ...data, customerId: Number(customerId) } as any,
+        allItemsWithCalculations,
         orderCode,
         totalAmount,
         paidAmount,
         userId,
-        inventoryShortages
+        inventoryShortages,
+        effectiveDiscountAmount,
+        initialOrderStatus
       );
     }
+
+    // ─── Increment promotion usage count after order commit ──────────────────
+    if (data.promotionId) {
+      // Fire-and-forget (non-blocking)
+      promotionService.incrementUsage(data.promotionId).catch((err) =>
+        console.error('Failed to increment promotion usage count', err)
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Trigger notification (fire and forget)
     notificationService.notifyNewOrder({
@@ -472,7 +556,9 @@ class InvoiceService {
     totalAmount: number,
     paidAmount: number,
     userId: number,
-    inventoryShortages: any[]
+    inventoryShortages: any[],
+    discountAmount: number,
+    initialOrderStatus: string
   ) {
     if (inventoryShortages.length > 0) {
       throw new ValidationError(
@@ -481,168 +567,68 @@ class InvoiceService {
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create order with completed status
-      const order = await tx.invoice.create({
-        data: {
-          orderCode,
-          customerId: data.customerId,
-          warehouseId: data.warehouseId,
-          orderDate: data.orderDate ? new Date(data.orderDate) : new Date(),
-          salesChannel: data.salesChannel || 'retail',
-          totalAmount,
-          discountAmount: data.discountAmount || 0,
-          shippingFee: 0, // No shipping fee for pickup
-          taxAmount: 0,
-          paidAmount,
-          paymentMethod: data.paymentMethod,
-          paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
-          orderStatus: 'completed',
-          completedAt: data.orderDate ? new Date(data.orderDate) : new Date(),
-          deliveryAddress: null,
-          notes: data.notes,
-          createdBy: userId,
-          details: {
-            create: itemsWithCalculations.map((item) => ({
-              productId: item.productId,
-              warehouseId: item.warehouseId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              discountPercent: item.discountPercent || 0,
-              taxRate: item.taxRate,
-              notes: item.notes,
-            })),
+    // Tạo đơn bán + chi tiết. Phiếu xuất kho & phiếu thu sẽ tạo thủ công riêng biệt.
+    const order = await prisma.invoice.create({
+      data: {
+        orderCode,
+        customerId: Number(data.customerId) || 0,
+        orderDate: data.orderDate ? new Date(data.orderDate) : new Date(),
+        isPickupOrder: true,
+        totalAmount,
+        amount: Number(data.amount) || totalAmount,
+        subTotal: Number(data.subTotal) || totalAmount,
+        discountAmount,
+        shippingFee: 0,
+        taxAmount: Number(data.taxAmount) || 0,
+        paidAmount,
+        paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+        orderStatus: initialOrderStatus as string as any,
+        completedAt: null, // Since it can be preparing/pending, it's not completed yet
+        deliveryAddress: null,
+        notes: data.notes,
+        createdBy: userId,
+        promotionId: data.promotionId ?? null,
+        details: {
+          create: itemsWithCalculations.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            baseQuantity: item.baseQuantity || item.quantity,
+            conversionFactor: item.conversionFactor || 1,
+            unitPrice: item.unitPrice || item.price || 0,
+            price: item.price || 0,
+            discountPercent: item.discountPercent || 0,
+            discountRate: item.discountRate || 0,
+            discountAmount: item.discountAmount || 0,
+            taxRate: item.taxRate ? String(item.taxRate) : null,
+            taxIds: item.taxIds || null,
+            taxAmount: item.taxAmount || 0,
+            subTotal: item.subTotal || item.quantity * (item.price || 0),
+            total: item.total || 0,
+            periodMonths: item.periodMonths ? String(item.periodMonths) : null,
+            warrantyCost: item.warrantyCost ? Number(item.warrantyCost) : 0,
+            applyWarranty: item.applyWarranty || false,
+            unitId: item.unitId || null,
+            unitName: item.unitName || null,
+            notes: item.notes,
+          })),
+        },
+      },
+      include: {
+        customer: true,
+        details: {
+          include: {
+            product: true,
           },
         },
-        include: {
-          customer: true,
-          details: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      });
-
-      // 2. Reduce inventory quantity immediately
-      for (const item of data.items) {
-        const warehouseId = item.warehouseId || data.warehouseId;
-        if (warehouseId) {
-          const inventory = await tx.inventory.findFirst({
-            where: {
-              productId: item.productId,
-              warehouseId,
-            },
-          });
-
-          if (inventory) {
-            await tx.inventory.update({
-              where: { id: inventory.id },
-              data: {
-                quantity: {
-                  decrement: item.quantity,
-                },
-                updatedBy: userId,
-              },
-            });
-
-            // FEFO Deduction for InventoryBatch and link to InvoiceDetail
-            const orderDetail = order.details.find(d => d.productId === item.productId);
-            if (orderDetail) {
-              const deductedBatches = await inventoryService.deductInventoryBatchFEFO(
-                tx, warehouseId, item.productId, item.quantity, userId
-              );
-
-              if (deductedBatches && deductedBatches.length > 0) {
-                await tx.invoiceBatchDetail.createMany({
-                  data: deductedBatches.map(b => ({
-                    invoiceDetailId: orderDetail.id,
-                    inventoryBatchId: b.inventoryBatchId,
-                    quantity: b.quantity
-                  }))
-                });
-              }
-            }
-          }
-        }
-      }
-
-      // 3. Create StockTransaction (export) immediately
-      if (data.warehouseId) {
-        await tx.stockTransaction.create({
-          data: {
-            transactionCode: `EX-${orderCode}`,
-            transactionType: 'export', // Enum
-            warehouseId: data.warehouseId,
-            referenceType: 'invoice',
-            referenceId: order.id,
-            status: 'completed', // Xuất xong luôn
-            totalValue: totalAmount, // Giá trị phiếu xuất
-            notes: `Xuất bán lẻ đơn ${orderCode}`,
-            createdBy: userId,
-            details: {
-              create: itemsWithCalculations.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice, // Lưu giá vốn hoặc giá bán tùy nghiệp vụ kho
-                warehouseId: data.warehouseId,
-              })),
-            },
-          },
-        });
-      }
-
-      // 4. Update customer debt if payment is unpaid or partial
-      if (order.paymentStatus !== 'paid') {
-        const debtAmount = totalAmount - paidAmount;
-        await tx.customer.update({
-          where: { id: data.customerId },
-          data: {
-            currentDebt: {
-              increment: debtAmount,
-            },
-            debtUpdatedAt: new Date(),
-          },
-        });
-      }
-
-      // 5. Create PaymentReceipt if payment > 0
-      if (paidAmount > 0) {
-        // Nếu đơn hàng là Credit/Installment -> Khoản trả trước mặc định coi là Tiền mặt (hoặc cần thêm field từ FE)
-        // Nếu đơn hàng là Cash/Transfer -> Dùng đúng phương thức đó.
-        let receiptPaymentMethod: 'cash' | 'transfer' | 'card' = 'cash';
-
-        if (data.paymentMethod === 'transfer') {
-          receiptPaymentMethod = 'transfer';
-        }
-        // Nếu data.paymentMethod là 'cash', 'installment', 'credit' -> code này sẽ fallback về 'cash'
-        await tx.paymentReceipt.create({
-          data: {
-            receiptCode: `PT-${orderCode}`,
-            receiptType: 'sales',
-            customerId: data.customerId,
-            orderId: order.id,
-            amount: paidAmount,
-            receiptDate: new Date(),
-            paymentMethod: receiptPaymentMethod,
-            isPosted: receiptPaymentMethod === 'cash' || receiptPaymentMethod === 'transfer',
-            notes: `Thu tiền đơn hàng ${orderCode} (${
-              data.paymentMethod === 'installment' ? 'Trả trước' : 'Thanh toán'
-            })`,
-            createdBy: userId,
-          },
-        });
-      }
-
-      return order;
+      },
     });
 
     logActivity('create', userId, 'invoices', {
-      recordId: result.id,
-      orderCode: result.orderCode,
+      recordId: order.id,
+      orderCode: order.orderCode,
     });
 
-    return result;
+    return order;
   }
 
   private async createDeliveryOrder(
@@ -652,149 +638,76 @@ class InvoiceService {
     totalAmount: number,
     paidAmount: number,
     userId: number,
-    inventoryShortages: any[]
+    inventoryShortages: any[],
+    discountAmount: number,
+    initialOrderStatus: string
   ) {
-    const result = await prisma.$transaction(async (tx) => {
-      // Giai đoạn 1: Tạo đơn hàng (Hàng vẫn ở trong kho, chỉ dán tem "Đã bán")
-      // 1. Create order with pending status
-      const order = await tx.invoice.create({
-        data: {
-          orderCode,
-          customerId: data.customerId,
-          warehouseId: data.warehouseId,
-          orderDate: data.orderDate ? new Date(data.orderDate) : new Date(),
-          salesChannel: data.salesChannel || 'retail',
-          totalAmount,
-          discountAmount: data.discountAmount || 0,
-          shippingFee: data.shippingFee || 0,
-          taxAmount: 0,
-          paidAmount,
-          paymentMethod: data.paymentMethod,
-          paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
-          orderStatus: 'pending',
-          deliveryAddress: data.deliveryAddress,
-          notes: data.notes,
-          createdBy: userId,
-          details: {
-            create: itemsWithCalculations.map((item) => ({
-              productId: item.productId,
-              warehouseId: item.warehouseId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              discountPercent: item.discountPercent || 0,
-              taxRate: item.taxRate,
-              notes: item.notes,
-            })),
+    // Tạo đơn bán + chi tiết với trạng thái ban đầu.
+    // Phiếu giao hàng, phiếu xuất kho, phiếu thu sẽ tạo thủ công riêng biệt.
+    const order = await prisma.invoice.create({
+      data: {
+        orderCode,
+        customerId: Number(data.customerId) || 0,
+        orderDate: data.orderDate ? new Date(data.orderDate) : new Date(),
+        isPickupOrder: false,
+        totalAmount,
+        amount: Number(data.amount) || totalAmount,
+        subTotal: Number(data.subTotal) || totalAmount,
+        discountAmount,
+        shippingFee: Number(data.shippingFee) || 0,
+        taxAmount: Number(data.taxAmount) || 0,
+        paidAmount,
+        paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+        orderStatus: initialOrderStatus as string as any,
+        expectedDeliveryDate: data.expectedDeliveryDate ? new Date(data.expectedDeliveryDate) : null,
+        deliveryAddress: data.deliveryAddress,
+        recipientName: data.recipientName || null,
+        recipientPhone: data.recipientPhone || null,
+        notes: data.notes,
+        createdBy: userId,
+        promotionId: data.promotionId ?? null,
+        details: {
+          create: itemsWithCalculations.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            baseQuantity: item.baseQuantity || item.quantity,
+            conversionFactor: item.conversionFactor || 1,
+            unitPrice: item.unitPrice || item.price || 0,
+            price: item.price || 0,
+            discountPercent: item.discountPercent || 0,
+            discountRate: item.discountRate || 0,
+            discountAmount: item.discountAmount || 0,
+            taxRate: item.taxRate ? String(item.taxRate) : null,
+            taxIds: item.taxIds || null,
+            taxAmount: item.taxAmount || 0,
+            subTotal: item.subTotal || item.quantity * (item.price || 0),
+            total: item.total || 0,
+            periodMonths: item.periodMonths ? String(item.periodMonths) : null,
+            warrantyCost: item.warrantyCost ? Number(item.warrantyCost) : 0,
+            applyWarranty: item.applyWarranty || false,
+            unitId: item.unitId || null,
+            unitName: item.unitName || null,
+            notes: item.notes,
+          })),
+        },
+      },
+      include: {
+        customer: true,
+        details: {
+          include: {
+            product: true,
           },
         },
-        include: {
-          customer: true,
-          details: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      });
-
-      // 2. Giữ hàng bằng reservedQuantity (xí chỗ, không trừ quantity)
-      for (const item of data.items) {
-        const warehouseId = item.warehouseId || data.warehouseId;
-        if (warehouseId) {
-          const inventory = await tx.inventory.findFirst({
-            where: {
-              productId: item.productId,
-              warehouseId,
-            },
-          });
-
-          if (inventory) {
-            await tx.inventory.update({
-              where: { id: inventory.id },
-              data: {
-                reservedQuantity: {
-                  increment: item.quantity,
-                },
-                updatedBy: userId,
-              },
-            });
-          }
-        }
-      }
-
-      // 3. Tạo Delivery record
-      const deliveryCode = await this.generateDeliveryCode(tx);
-      const customer = order.customer;
-      await tx.delivery.create({
-        data: {
-          deliveryCode,
-          orderId: order.id,
-          deliveryStaffId: userId,
-          deliveryDate: new Date().toISOString().split('T')[0],
-          deliveryStatus: 'pending',
-          deliveryCost: 0,
-          // Xử lý 3 trường hợp thanh toán: COD, Transfer trước, Credit
-          // Case A: COD (Chưa thanh toán) -> codAmount = totalAmount
-          // Case B: Transfer trước (Thanh toán rồi) -> codAmount = 0
-          // Case C: Credit (Mua nợ) -> codAmount = 0
-          codAmount: data.paymentMethod === 'cash' && paidAmount === 0 ? totalAmount : 0,
-          settlementStatus: 'pending',
-          notes: `Giao hàng cho khách ${data.recipientName || customer?.customerName} - ${
-            data.recipientPhone || customer?.phone
-          }`,
-        },
-      });
-
-      // 4. Xử lý công nợ khách hàng (Case B & C: Nếu chưa trả hết tiền)
-      if (order.paymentStatus !== 'paid') {
-        const debtAmount = totalAmount - paidAmount;
-        await tx.customer.update({
-          where: { id: data.customerId },
-          data: {
-            currentDebt: {
-              increment: debtAmount,
-            },
-            debtUpdatedAt: new Date(),
-          },
-        });
-      }
-
-      // 5. Tạo PaymentReceipt chỉ khi đã thanh toán trước (Case B: Transfer)
-      // Case A: COD - Chưa tạo receipt (Tiền chưa về, Shipper ghi nhận)
-      // Case C: Credit - Không tạo receipt (Ghi nợ)
-      if (paidAmount > 0 && data.paymentMethod !== 'credit' && data.paymentMethod !== 'installment') {
-        let receiptPaymentMethod: 'cash' | 'transfer' | 'card' = 'cash';
-
-        if (data.paymentMethod === 'transfer') {
-          receiptPaymentMethod = 'transfer';
-        }
-        
-        await tx.paymentReceipt.create({
-          data: {
-            receiptCode: `PT-${orderCode}`,
-            receiptType: 'sales',
-            customerId: data.customerId,
-            orderId: order.id,
-            amount: paidAmount,
-            receiptDate: new Date(),
-            paymentMethod: receiptPaymentMethod,
-            isPosted: receiptPaymentMethod === 'cash' || receiptPaymentMethod === 'transfer',
-            notes: `Thu tiền đơn hàng ${orderCode} (Thanh toán trước)`,
-            createdBy: userId,
-          },
-        });
-      }
-
-      return order;
+      },
     });
 
     logActivity('create', userId, 'invoices', {
-      recordId: result.id,
-      orderCode: result.orderCode,
+      recordId: order.id,
+      orderCode: order.orderCode,
     });
 
     return {
-      order: result,
+      order,
       inventoryShortages: inventoryShortages.length > 0 ? inventoryShortages : undefined,
     };
   }
@@ -946,30 +859,8 @@ class InvoiceService {
           }
         }
 
-        // Tạo StockTransaction (phiếu xuất kho)
-        if (order.warehouseId) {
-          await tx.stockTransaction.create({
-            data: {
-              transactionCode: `EX-${order.orderCode}`,
-              transactionType: 'export',
-              warehouseId: order.warehouseId,
-              referenceType: 'invoice',
-              referenceId: order.id,
-              status: 'completed',
-              totalValue: Number(order.totalAmount),
-              notes: `Xuất giao hàng đơn ${order.orderCode}`,
-              createdBy: userId,
-              details: {
-                create: order.details.map((detail) => ({
-                  productId: detail.productId,
-                  quantity: detail.quantity,
-                  unitPrice: detail.unitPrice,
-                  warehouseId: detail.warehouseId || order.warehouseId,
-                })),
-              },
-            },
-          });
-        }
+        // Phiếu xuất kho sẽ được tạo thủ công sau, bỏ qua ở đây.
+        // if (order.warehouseId) { ... }
 
         // Cập nhật Delivery status thành in_transit
         if (order.deliveries && order.deliveries.length > 0) {
@@ -1237,7 +1128,6 @@ class InvoiceService {
         data: {
           paidAmount: newPaidAmount,
           paymentStatus,
-          paymentMethod: data.paymentMethod,
         },
         include: {
           customer: true,

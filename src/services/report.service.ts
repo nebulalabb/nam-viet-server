@@ -680,7 +680,7 @@ class ReportService {
         gte: dateRange.fromDate,
         lte: dateRange.toDate,
       },
-      ...(salesChannel && { salesChannel: salesChannel as any }),
+      ...(salesChannel && { isPickupOrder: salesChannel === 'pickup' }),
       ...(customerId && { customerId }),
     };
 
@@ -696,7 +696,7 @@ class ReportService {
         taxAmount: true,
         shippingFee: true,
         paidAmount: true,
-        salesChannel: true,
+        isPickupOrder: true,
         customer: {
           select: {
             id: true,
@@ -811,7 +811,7 @@ class ReportService {
     }
 
     const result = await prisma.invoice.groupBy({
-      by: ['salesChannel'],
+      by: ['isPickupOrder'],
       where,
       _sum: {
         totalAmount: true,
@@ -823,7 +823,7 @@ class ReportService {
     });
 
     return result.map((item) => ({
-      channel: item.salesChannel,
+      channel: item.isPickupOrder ? 'pickup' : 'delivery',
       revenue: Number(item._sum.totalAmount || 0),
       paid: Number(item._sum.paidAmount || 0),
       orderCount: item._count.id,
@@ -1278,7 +1278,7 @@ class ReportService {
         };
       }
       acc[key].quantitySold += Number(detail.quantity);
-      acc[key].revenue += Number(detail.unitPrice || 0) * Number(detail.quantity);
+      acc[key].revenue += Number(detail.price || 0) * Number(detail.quantity);
       acc[key].orderCount += 1;
       return acc;
     }, {} as Record<number, any>);
@@ -1373,7 +1373,7 @@ class ReportService {
 
     // Optional filters
     if (warehouseId) where.warehouseId = warehouseId;
-    if (salesChannel) where.salesChannel = salesChannel;
+    if (salesChannel) where.isPickupOrder = salesChannel === 'pickup';
     if (customerId) where.customerId = customerId;
     if (createdBy) where.createdBy = createdBy;
 
@@ -1403,7 +1403,7 @@ class ReportService {
     orders.forEach((order) => {
       order.details.forEach((detail: any) => {
         const cost = Number(detail.product.basePrice || 0) * Number(detail.quantity || 0);
-        const revenue = Number(detail.unitPrice || 0) * Number(detail.quantity || 0);
+        const revenue = Number(detail.price || 0) * Number(detail.quantity || 0);
         estimatedProfit += revenue - cost;
       });
     });
@@ -1462,7 +1462,7 @@ class ReportService {
     // 3. By Sales Channel
     const byChannelMap = new Map<string, any>();
     orders.forEach((order) => {
-      const channel = order.salesChannel || 'unknown';
+      const channel = order.isPickupOrder ? 'pickup' : 'delivery';
       if (!byChannelMap.has(channel)) {
         byChannelMap.set(channel, {
           channel,
@@ -1950,7 +1950,7 @@ class ReportService {
     };
 
     if (warehouseId) where.warehouseId = warehouseId;
-    if (salesChannel) where.salesChannel = salesChannel;
+    if (salesChannel) where.isPickupOrder = salesChannel === 'pickup';
     if (customerId) where.customerId = customerId;
     if (createdBy) where.createdBy = createdBy;
 
@@ -1960,7 +1960,7 @@ class ReportService {
       select: {
         orderDate: true,
         totalAmount: true,
-        salesChannel: true,
+        isPickupOrder: true,
       },
     });
 
@@ -1979,7 +1979,7 @@ class ReportService {
     // Chart 2: By channel (pie)
     const channelMap = new Map<string, number>();
     orders.forEach((order) => {
-      const channel = order.salesChannel || 'unknown';
+      const channel = order.isPickupOrder ? 'pickup' : 'delivery';
       const current = channelMap.get(channel) || 0;
       channelMap.set(channel, current + Number(order.totalAmount || 0));
     });
@@ -2019,7 +2019,7 @@ class ReportService {
     };
 
     if (warehouseId) where.warehouseId = warehouseId;
-    if (salesChannel) where.salesChannel = salesChannel;
+    if (salesChannel) where.isPickupOrder = salesChannel === 'pickup';
     if (customerId) where.customerId = customerId;
     if (createdBy) where.createdBy = createdBy;
 
@@ -2046,7 +2046,7 @@ class ReportService {
         }
         const item = productMap.get(key);
         item.totalQty += Number(detail.quantity || 0);
-        item.totalRevenue += Number(detail.unitPrice || 0) * Number(detail.quantity || 0);
+        item.totalRevenue += Number(detail.price || 0) * Number(detail.quantity || 0);
       });
 
       return Array.from(productMap.values()).sort(

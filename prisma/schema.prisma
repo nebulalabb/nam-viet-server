@@ -738,34 +738,38 @@ model Expiry {
 }
 
 model Invoice {
-  id              Int           @id @default(autoincrement())
-  orderCode       String        @unique @map("order_code") @db.VarChar(50)
-  customerId      Int           @map("customer_id")
-  warehouseId     Int?          @map("warehouse_id")
-  orderDate       DateTime      @map("order_date") @db.Date
-  salesChannel    SalesChannel  @default(retail) @map("sales_channel")
-  totalAmount     Decimal       @default(0) @map("total_amount") @db.Decimal(15, 2)
-  discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(15, 2)
-  taxAmount       Decimal       @default(0) @map("tax_amount") @db.Decimal(15, 2)
-  shippingFee     Decimal       @default(0) @map("shipping_fee") @db.Decimal(15, 2)
-  paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(15, 2)
-  paymentMethod   PaymentMethod @map("payment_method")
-  paymentStatus   PaymentStatus @default(unpaid) @map("payment_status")
-  orderStatus     OrderStatus   @default(pending) @map("order_status")
-  deliveryAddress String?       @map("delivery_address") @db.VarChar(255)
-  notes           String?       @db.VarChar(255)
-  createdBy       Int           @map("created_by")
-  approvedBy      Int?          @map("approved_by")
-  cancelledBy     Int?          @map("cancelled_by")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  approvedAt      DateTime?     @map("approved_at")
-  completedAt     DateTime?     @map("completed_at")
-  cancelledAt     DateTime?     @map("cancelled_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  deletedAt       DateTime?     @map("deleted_at")
+  id                   Int           @id @default(autoincrement())
+  orderCode            String        @unique @map("order_code") @db.VarChar(50)
+  customerId           Int           @map("customer_id")
+  orderDate            DateTime      @map("order_date") @db.Date
+  isPickupOrder        Boolean       @default(false) @map("is_pickup_order")
+  totalAmount          Decimal       @default(0) @map("total_amount") @db.Decimal(15, 2)
+  amount               Decimal       @default(0) @db.Decimal(15, 2)
+  subTotal             Decimal       @default(0) @map("sub_total") @db.Decimal(15, 2)
+  discountAmount       Decimal       @default(0) @map("discount_amount") @db.Decimal(15, 2)
+  taxAmount            Decimal       @default(0) @map("tax_amount") @db.Decimal(15, 2)
+  shippingFee          Decimal       @default(0) @map("shipping_fee") @db.Decimal(15, 2)
+  paidAmount           Decimal       @default(0) @map("paid_amount") @db.Decimal(15, 2)
+  paymentStatus        PaymentStatus @default(unpaid) @map("payment_status")
+  orderStatus          OrderStatus   @default(pending) @map("order_status")
+  promotionId          Int?          @map("promotion_id")
+  deliveryAddress      String?       @map("delivery_address") @db.VarChar(255)
+  recipientName        String?       @map("recipient_name") @db.VarChar(255)
+  recipientPhone       String?       @map("recipient_phone") @db.VarChar(20)
+  notes                String?       @db.VarChar(255)
+  createdBy            Int           @map("created_by")
+  approvedBy           Int?          @map("approved_by")
+  cancelledBy          Int?          @map("cancelled_by")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  approvedAt           DateTime?     @map("approved_at")
+  completedAt          DateTime?     @map("completed_at")
+  cancelledAt          DateTime?     @map("cancelled_at")
+  expectedDeliveryDate DateTime?     @map("expected_delivery_date")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  deletedAt            DateTime?     @map("deleted_at")
 
   customer  Customer   @relation(fields: [customerId], references: [id])
-  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
+  promotion Promotion? @relation("InvoicePromotion", fields: [promotionId], references: [id], onDelete: SetNull)
   creator   User       @relation("SalesCreator", fields: [createdBy], references: [id])
   approver  User?      @relation("SalesApprover", fields: [approvedBy], references: [id])
   canceller User?      @relation("SalesCanceller", fields: [cancelledBy], references: [id])
@@ -774,6 +778,8 @@ model Invoice {
   deliveries      Delivery[]
   paymentReceipts PaymentReceipt[]
   expiries        Expiry[]
+  warehouse       Warehouse?       @relation(fields: [warehouseId], references: [id])
+  warehouseId     Int?
 
   @@index([orderCode])
   @@index([orderDate])
@@ -784,23 +790,35 @@ model Invoice {
 }
 
 model InvoiceDetail {
-  id              Int       @id @default(autoincrement())
-  orderId         Int       @map("order_id")
-  productId       Int       @map("product_id")
-  warehouseId     Int?      @map("warehouse_id")
-  quantity        Decimal   @db.Decimal(15, 2)
-  unitPrice       Decimal   @map("unit_price") @db.Decimal(15, 2)
-  discountPercent Decimal   @default(0) @map("discount_percent") @db.Decimal(5, 2)
-  taxRate         Decimal   @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  batchNumber     String?   @map("batch_number") @db.VarChar(100)
-  expiryDate      DateTime? @map("expiry_date") @db.Date
-  notes           String?   @db.VarChar(255)
+  id               Int       @id @default(autoincrement())
+  orderId          Int       @map("order_id")
+  productId        Int       @map("product_id")
+  quantity         Decimal   @db.Decimal(15, 2)
+  baseQuantity     Decimal   @default(0) @map("base_quantity") @db.Decimal(15, 2)
+  conversionFactor Decimal   @default(1) @map("conversion_factor") @db.Decimal(10, 2)
+  price            Decimal   @default(0) @db.Decimal(15, 2)
+  discountRate     Decimal   @default(0) @map("discount_rate") @db.Decimal(5, 2)
+  discountAmount   Decimal   @default(0) @map("discount_amount") @db.Decimal(15, 2)
+  taxRate          String?   @map("tax_rate") @db.VarChar(50)
+  taxIds           Json?     @map("tax_ids")
+  taxAmount        Decimal   @default(0) @map("tax_amount") @db.Decimal(15, 2)
+  subTotal         Decimal   @default(0) @map("sub_total") @db.Decimal(15, 2)
+  total            Decimal   @default(0) @map("total") @db.Decimal(15, 2)
+  periodMonths     String?   @map("period_months") @db.VarChar(50)
+  warrantyCost     Decimal   @default(0) @map("warranty_cost") @db.Decimal(15, 2)
+  applyWarranty    Boolean   @default(false) @map("apply_warranty")
+  unitId           Int?      @map("unit_id")
+  unitName         String?   @map("unit_name") @db.VarChar(50)
+  batchNumber      String?   @map("batch_number") @db.VarChar(100)
+  expiryDate       DateTime? @map("expiry_date") @db.Date
+  notes            String?   @db.VarChar(255)
 
-  order     Invoice    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product    @relation(fields: [productId], references: [id])
-  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
+  order   Invoice @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
-  batches InvoiceBatchDetail[] // Link to batches used to fulfill this detail
+  batches     InvoiceBatchDetail[] // Link to batches used to fulfill this detail
+  warehouse   Warehouse?           @relation(fields: [warehouseId], references: [id])
+  warehouseId Int?
 
   @@index([orderId])
   @@index([productId])
@@ -1048,6 +1066,7 @@ model Promotion {
   canceller User? @relation("PromotionCanceller", fields: [cancelledBy], references: [id])
 
   products PromotionProduct[]
+  invoices Invoice[]          @relation("InvoicePromotion")
 
   @@index([promotionCode])
   @@index([startDate, endDate])
@@ -1396,13 +1415,6 @@ enum CustomerStatus {
   active
   inactive
   blacklisted
-}
-
-enum SalesChannel {
-  retail
-  wholesale
-  online
-  distributor
 }
 
 enum AuthProvider {

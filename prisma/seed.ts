@@ -316,6 +316,12 @@ async function main() {
     { key: "UPDATE_DEBT", name: "Sửa", module: "debt", moduleLabel: "Công nợ" },
     { key: "DELETE_DEBT", name: "Xóa", module: "debt", moduleLabel: "Công nợ" },
 
+    // Quản lý kho
+    { key: "GET_WAREHOUSE", name: "Xem", module: "warehouse", moduleLabel: "Kho" },
+    { key: "CREATE_WAREHOUSE", name: "Thêm", module: "warehouse", moduleLabel: "Kho" },
+    { key: "UPDATE_WAREHOUSE", name: "Sửa", module: "warehouse", moduleLabel: "Kho" },
+    { key: "DELETE_WAREHOUSE", name: "Xóa", module: "warehouse", moduleLabel: "Kho" },
+
     // Nhập kho
     { key: "GET_WAREHOUSE_IMPORT", name: "Xem", module: "warehouse_in", moduleLabel: "Nhập kho" },
     { key: "CREATE_WAREHOUSE_IMPORT", name: "Thêm", module: "warehouse_in", moduleLabel: "Nhập kho" },
@@ -345,6 +351,9 @@ async function main() {
     { key: "GET_INVENTORY_REPORT", name: "Xem tồn kho", module: "report", moduleLabel: "Báo cáo" },
     { key: "GET_SALES_REPORT", name: "Xem bán hàng", module: "report", moduleLabel: "Báo cáo" },
     { key: "GET_FINANCIAL_REPORT", name: "Xem tài chính", module: "report", moduleLabel: "Báo cáo" },
+    { key: "INVENTORY_NXT_VIEW", name: "Xem tổng hợp X-N-T", module: "report", moduleLabel: "Báo cáo" },
+    { key: "INVENTORY_LEDGER_VIEW", name: "Xem sổ chi tiết kho", module: "report", moduleLabel: "Báo cáo" },
+    { key: "GET_STOCK", name: "Xem cảnh báo tồn kho", module: "report", moduleLabel: "Báo cáo" },
 
     // Khác
     { key: "GET_PERMISSION", name: "Xem quyền", module: "permission", moduleLabel: "Quyền hạn" },
@@ -445,7 +454,7 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: 'leeminhkang@gmail.com' }, { employeeCode: 'NV-00010' }],
+      OR: [{ email: 'nhoangkha03@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
   });
 
@@ -453,7 +462,7 @@ async function main() {
     adminUser = await prisma.user.create({
       data: {
         employeeCode: 'NV-00010',
-        email: 'leeminhkang@gmail.com',
+        email: 'nhoangkha03@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',
@@ -657,7 +666,6 @@ async function main() {
       create: {
         categoryCode: 'CAT-001',
         categoryName: 'Nước giải khát',
-        slug: 'nuoc-giai-khat',
         status: 'active',
       },
     }),
@@ -667,7 +675,6 @@ async function main() {
       create: {
         categoryCode: 'CAT-002',
         categoryName: 'Nguyên liệu',
-        slug: 'nguyen-lieu',
         status: 'active',
       },
     }),
@@ -677,7 +684,6 @@ async function main() {
       create: {
         categoryCode: 'CAT-003',
         categoryName: 'Bao bì',
-        slug: 'bao-bi',
         status: 'active',
       },
     }),
@@ -730,7 +736,7 @@ async function main() {
   console.log('✅ Database seed completed successfully! 🎉\n');
   console.log('📌 Login Credentials:\n');
   console.log('👤 Admin:');
-  console.log('   Email: leeminhkang@gmail.com');
+  console.log('   Email: nhoangkha03@gmail.com');
   console.log('   Password: admin123\n');
   console.log('👥 Other Users (password: 123456):');
   console.log('   - manager1@company.com (Nguyễn Văn Quản - Warehouse Manager)');

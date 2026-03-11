@@ -35,6 +35,12 @@ router.get(
   asyncHandler(promotionController.getActive.bind(promotionController))
 );
 
+// GET /api/promotions/for-cart - Get applicable promotions for a given cart
+router.get(
+  '/for-cart',
+  asyncHandler(promotionController.getForCart.bind(promotionController))
+);
+
 // POST /api/promotions/auto-expire - Auto expire promotions (cron job)
 router.post(
   '/auto-expire',
