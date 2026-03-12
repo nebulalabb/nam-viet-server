@@ -340,7 +340,7 @@ async function main() {
     { key: "GET_STORAGE_SIZE_SETTING", name: "Xem dung lượng lưu trữ", module: "setting", moduleLabel: "Cài đặt" },
 
     // Báo cáo
-    { key: "GET_DASHBOARD", name: "Xem dashboard", module: "report", moduleLabel: "Báo cáo"},
+    { key: "GET_DASHBOARD", name: "Xem dashboard", module: "report", moduleLabel: "Báo cáo" },
     { key: "GET_REVENUE_REPORT", name: "Xem doanh thu", module: "report", moduleLabel: "Báo cáo" },
     { key: "GET_INVENTORY_REPORT", name: "Xem tồn kho", module: "report", moduleLabel: "Báo cáo" },
     { key: "GET_SALES_REPORT", name: "Xem bán hàng", module: "report", moduleLabel: "Báo cáo" },
@@ -445,7 +445,7 @@ async function main() {
 
   let adminUser = await prisma.user.findFirst({
     where: {
-      OR: [{ email: 'leeminhkang@gmail.com' }, { employeeCode: 'NV-00010' }],
+      OR: [{ email: 'lyvanquy2020@gmail.com' }, { employeeCode: 'NV-00010' }],
     },
   });
 
@@ -453,7 +453,7 @@ async function main() {
     adminUser = await prisma.user.create({
       data: {
         employeeCode: 'NV-00010',
-        email: 'leeminhkang@gmail.com',
+        email: 'lyvanquy2020@gmail.com',
         passwordHash: hashedPassword,
         fullName: 'Quản trị viên hệ thống',
         phone: '0123456789',

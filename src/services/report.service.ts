@@ -30,7 +30,7 @@ class ReportService {
   // =====================================================
   async getDashboardStats(options: { period?: string; fromDate?: string; toDate?: string; warehouseId?: number }) {
     const { period = 'month', fromDate, toDate, warehouseId } = options;
-    
+
     const today = new Date();
     let periodFromDate: Date, periodToDate: Date;
     let previousFromDate: Date, previousToDate: Date;
@@ -80,10 +80,10 @@ class ReportService {
       }
     }
 
-    // Common WHERE clauses for quick inline usage
-    const invoiceWhere: any = { orderStatus: 'pending' };
+    // Common WHERE clauses for pending invoice count (pending + preparing orders)
+    const invoiceWhere: any = { orderStatus: { in: ['pending', 'preparing', 'delivering'] } };
     if (warehouseId) invoiceWhere.warehouseId = warehouseId;
-    
+
     // Note: Production Order and Activity Logs might not support warehouse param easily
     // We will apply warehouse filter where straightforward
 
@@ -224,7 +224,7 @@ class ReportService {
     const formattedOverdueDebts = overdueDebts.map((debt: any) => {
       const daysOverdue = Math.floor(
         (new Date().getTime() - new Date(debt.debtUpdatedAt || new Date()).getTime()) /
-          (1000 * 60 * 60 * 24)
+        (1000 * 60 * 60 * 24)
       );
       return {
         customer_id: debt.id,
@@ -958,7 +958,7 @@ class ReportService {
       const availableQty = Number(inv.quantity) - Number(inv.reservedQuantity);
       const value = availableQty * Number(inv.product.basePrice || 0);
       const isLowStock = availableQty < Number(inv.product.minStockLevel);
-      
+
       // Check if product is in expiring list
       const isExpiring = expiringProductIds ? expiringProductIds.has(inv.productId) : false;
       const daysUntilExpiry = null; // We don't calculate exact days here, just check if in expiring list
@@ -1752,8 +1752,7 @@ class ReportService {
   private async getOrderCountByPeriod(fromDate: Date, toDate: Date, warehouseId?: number): Promise<number> {
     return await prisma.invoice.count({
       where: {
-        orderStatus: 'completed',
-        completedAt: {
+        createdAt: {
           gte: fromDate,
           lte: toDate,
         },
@@ -1761,6 +1760,7 @@ class ReportService {
       },
     });
   }
+
 
   private async getTotalInventoryValue(warehouseId?: number): Promise<number> {
     const where: any = {};
@@ -2199,7 +2199,7 @@ class ReportService {
   // =====================================================
   // FILTER OPTIONS
   // =====================================================
-  
+
   // Get warehouses for filter (truy vấn trực tiếp)
   async getWarehousesForFilter() {
     const warehouses = await prisma.warehouse.findMany({

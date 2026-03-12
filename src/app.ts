@@ -216,9 +216,11 @@ app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/stock-transactions', stockTransactionRoutes);
+app.use('/api/warehouse-receipts', stockTransactionRoutes); // alias for frontend compatibility
 app.use('/api/stock-transfers', stockTransferRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/invoice', invoiceRoutes); // alias for frontend compatibility
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/payment-receipts', paymentReceiptRoutes);
 app.use('/api/payment-vouchers', paymentVoucherRoutes);

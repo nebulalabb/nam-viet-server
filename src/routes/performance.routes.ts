@@ -92,6 +92,6 @@ router.get('/health', performanceController.healthCheck);
  *       200:
  *         description: Metrics cleared successfully
  */
-router.post('/clear', authentication, authorize('view_reports'), performanceController.clearPerformanceMetrics);
+router.post('/clear', authentication, authorize('GET_FINANCIAL_REPORT'), performanceController.clearPerformanceMetrics);
 
 export default router;

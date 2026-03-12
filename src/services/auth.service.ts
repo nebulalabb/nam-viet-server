@@ -177,7 +177,7 @@ class AuthService {
 
     const resetToken = this.generateResetToken();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    
+
 
     await prisma.verificationCode.create({
       data: {

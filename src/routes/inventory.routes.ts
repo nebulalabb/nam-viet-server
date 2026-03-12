@@ -38,7 +38,7 @@ router.get(
 // GET /api/inventory/value-report - Get inventory value report
 router.get(
   '/value-report',
-  authorize('view_inventory', 'view_reports'),
+  authorize('GET_INVENTORY_REPORT'),
   asyncHandler(inventoryController.getValueReport.bind(inventoryController))
 );
 

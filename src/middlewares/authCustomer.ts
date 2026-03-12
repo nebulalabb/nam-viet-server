@@ -1,7 +1,7 @@
-import { Response, NextFunction, Request } from 'express'; 
+import { Response, NextFunction, Request } from 'express';
 import { AuthRequest } from '@custom-types/common.type';
 import { AuthenticationError, AuthorizationError } from '@utils/errors';
-import { verifyAccessToken } from '@utils/cs-jwt'; 
+import { verifyAccessToken } from '@utils/cs-jwt';
 import { PrismaClient } from '@prisma/client';
 import { customerTokenBlacklist } from '@services/cs-auth.service';
 
@@ -23,7 +23,7 @@ const verifyCustomer = async (req: AuthRequest, _res: Response, next: NextFuncti
         }
 
         // ✅ 2. Verify Token
-        const decoded = verifyAccessToken(token); 
+        const decoded = verifyAccessToken(token);
 
         if (!decoded || !decoded.customerId || decoded.role !== 'customer') {
             throw new AuthenticationError('Invalid token payload');
@@ -38,28 +38,28 @@ const verifyCustomer = async (req: AuthRequest, _res: Response, next: NextFuncti
         });
 
         if (!account) {
-            throw new AuthenticationError('Account not found'); 
+            throw new AuthenticationError('Account not found');
         }
 
         if (!account.isActive) {
-            throw new AuthorizationError('Account is locked'); 
+            throw new AuthorizationError('Account is locked');
         }
 
         const { id: accountId, ...accountData } = account;
         const customerData = account.customer;
 
         req.user = {
-            ...accountData, 
-            accountId: accountId, 
-            id: customerData.id, 
-            customer: customerData, 
+            ...accountData,
+            accountId: accountId,
+            id: customerData.id,
+            customer: customerData,
             role: 'customer',
-        } as any; 
+        } as any;
 
         next();
 
     } catch (error) {
-        next(error); 
+        next(error);
     }
 };
 
@@ -72,7 +72,7 @@ export const customerAuthentication = (req: Request, res: Response, next: NextFu
 export const optionalCustomerAuthentication = async (req: Request, _res: Response, next: NextFunction) => {
     try {
         const authHeader = req.headers.authorization;
-        
+
         // 1. Nếu không có token -> Coi như khách vãng lai -> NEXT
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return next();
@@ -85,13 +85,13 @@ export const optionalCustomerAuthentication = async (req: Request, _res: Respons
             // Token không hợp lệ -> coi như chưa đăng nhập -> NEXT
             return next();
         }
-        
+
         // 3. Verify Token
         let decoded;
         try {
             decoded = verifyAccessToken(token);
         } catch (err) {
-            return next(); 
+            return next();
         }
 
         if (!decoded || !decoded.customerId) {
@@ -101,8 +101,8 @@ export const optionalCustomerAuthentication = async (req: Request, _res: Respons
         // 4. Query Customer
         const customer = await prisma.customer.findUnique({
             where: { id: decoded.customerId },
-            select: { 
-                id: true, 
+            select: {
+                id: true,
                 classification: true,
                 status: true
             }
