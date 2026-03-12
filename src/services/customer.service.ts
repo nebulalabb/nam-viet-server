@@ -240,7 +240,6 @@ class CustomerService {
         customerCode: data.customerCode,
         customerName: data.customerName,
         customerType: data.customerType,
-        classification: 'retail', // Keeping a default since DB schema might require it, but no longer exposed, or remove it entirely if db doesn't require it? Wait, let me check. I'll pass 'retail' to be safe since it's an enum. If it causes error, I'll update schema later.
         gender: data.gender,
         contactPerson: data.contactPerson,
         phone: data.phone,
@@ -952,7 +951,6 @@ class CustomerService {
             issuedAt: item.identityDate ? new Date(item.identityDate) : null,
             issuedBy: item.identityPlace?.trim() || null,
             notes: item.note?.trim() || null,
-            classification: item.classification?.trim() || 'retail',
             gender: item.gender || null,
             status: item.status || 'active',
             creditLimit: item.creditLimit ? new Prisma.Decimal(item.creditLimit) : new Prisma.Decimal(0),

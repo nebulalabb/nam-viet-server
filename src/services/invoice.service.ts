@@ -30,7 +30,7 @@ class InvoiceService {
     });
 
     const sequence = (count + 1).toString().padStart(3, '0');
-    return `DH-${dateStr}-${sequence}`;
+    return `DB-${dateStr}-${sequence}`;
   }
 
 
@@ -105,8 +105,10 @@ class InvoiceService {
               id: true,
               customerCode: true,
               customerName: true,
+              customerType: true,
               phone: true,
-              classification: true,
+              cccd: true,
+              taxCode: true,
             },
           },
           creator: {
@@ -134,60 +136,7 @@ class InvoiceService {
       remainingAmount: Number(order.totalAmount) - Number(order.paidAmount),
     }));
 
-    // Stat Cards - Calculate statistics for all orders matching the filters
-    const allOrders = await prisma.invoice.findMany({
-      where,
-      select: {
-        id: true,
-        totalAmount: true,
-        discountAmount: true,
-        taxAmount: true,
-        shippingFee: true,
-        paidAmount: true,
-        orderStatus: true,
-        paymentStatus: true,
-      },
-    });
-
-    // Calculate stats
-    const totalRevenue = allOrders
-      .filter((o) => o.orderStatus !== 'cancelled')
-      .reduce((sum, o) => {
-        const finalAmount =
-          Number(o.totalAmount) -
-          Number(o.discountAmount) +
-          Number(o.taxAmount) +
-          Number(o.shippingFee);
-        return sum + finalAmount;
-      }, 0);
-
-    const pendingOrders = allOrders.filter((o) => o.orderStatus === 'pending').length;
-
-    const preparingOrders = allOrders.filter((o) => o.orderStatus === 'preparing').length;
-
-    const deliveringOrders = allOrders.filter((o) => o.orderStatus === 'delivering').length;
-
-    const unpaidDebt = allOrders
-      .filter((o) => o.paymentStatus === 'unpaid' || o.paymentStatus === 'partial')
-      .reduce((sum, o) => {
-        const finalAmount =
-          Number(o.totalAmount) -
-          Number(o.discountAmount) +
-          Number(o.taxAmount) +
-          Number(o.shippingFee);
-        const debtAmount = finalAmount - Number(o.paidAmount || 0);
-        return sum + debtAmount;
-      }, 0);
-
-    const statistics = {
-      totalRevenue,
-      pending: pendingOrders,
-      preparing: preparingOrders,
-      delivering: deliveringOrders,
-      unpaidDebt,
-    };
-
-    const result = {
+    return {
       data: ordersWithRemaining,
       meta: {
         page: pageNum,
@@ -195,10 +144,52 @@ class InvoiceService {
         total,
         totalPages: Math.ceil(total / limitNum),
       },
-      statistics,
     };
+  }
 
-    return result;
+  // Get all invoices created by this user only
+  async getAllByUser(query: InvoiceQueryInput, userId: number) {
+    return this.getAll({ ...query, createdBy: userId } as any);
+  }
+
+  // Get invoice detail - only if created by this user
+  async getByIdForUser(id: number, userId: number) {
+    const order = await prisma.invoice.findFirst({
+      where: { id, createdBy: userId },
+      include: {
+        customer: {
+          select: {
+            id: true, customerCode: true, customerName: true,
+            phone: true, email: true, address: true,
+            creditLimit: true, currentDebt: true,
+          },
+        },
+        details: {
+          include: {
+            product: { 
+              select: { 
+                id: true, 
+                code: true, 
+                productName: true, 
+                image: true, 
+                unit: true
+              } 
+            },
+            warehouse: { select: { id: true, warehouseName: true } },
+          },
+        },
+        creator: { select: { id: true, fullName: true, employeeCode: true, email: true } },
+        paymentReceipts: {
+          select: { id: true, receiptCode: true, amount: true, receiptDate: true, paymentMethod: true },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError('Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này');
+    }
+
+    return { ...order, remainingAmount: Number(order.totalAmount) - Number(order.paidAmount) };
   }
 
   async getById(id: number) {
@@ -214,9 +205,10 @@ class InvoiceService {
             phone: true,
             email: true,
             address: true,
-            classification: true,
             creditLimit: true,
             currentDebt: true,
+            cccd: true,
+            taxCode: true,
           },
         },
         details: {
@@ -226,6 +218,7 @@ class InvoiceService {
                 id: true,
                 code: true,
                 productName: true,
+                image: true,
                 unit: true,
               },
             },
@@ -243,6 +236,7 @@ class InvoiceService {
             fullName: true,
             employeeCode: true,
             email: true,
+            phone: true,
           },
         },
         approver: {
@@ -331,7 +325,6 @@ class InvoiceService {
           cccd: data.newCustomer.cccd || null,
           issuedAt: data.newCustomer.issuedAt ? new Date(data.newCustomer.issuedAt) : null,
           issuedBy: data.newCustomer.issuedBy || null,
-          classification: 'retail',
           status: 'active',
           createdBy: userId,
         }
@@ -422,12 +415,10 @@ class InvoiceService {
       return {
         ...item,
         unitPrice,
-        taxRate: Number(taxRate),
       };
     });
 
     // ─── PROMOTION LOGIC ──────────────────────────────────────────────────────
-    let promotionDiscountAmount = 0;
     let giftItems: Array<typeof data.items[0] & { taxRate: number, discountPercent: number, unitPrice: number, isGift?: boolean }> = [];
 
     if (data.promotionId) {
@@ -446,7 +437,7 @@ class InvoiceService {
         throw new ValidationError(applyResult.message || 'Khuyến mãi không thể áp dụng cho đơn hàng này');
       }
 
-      promotionDiscountAmount = applyResult.discountAmount;
+      // promotionDiscountAmount used only for gift logic below
 
       // Build gift product items (unitPrice = 0) to add into invoice details
       if (applyResult.giftProducts && applyResult.giftProducts.length > 0) {
@@ -463,15 +454,15 @@ class InvoiceService {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Use promotion discount if provided; otherwise use manually entered discountAmount
-    const effectiveDiscountAmount = data.promotionId
-      ? promotionDiscountAmount
-      : (data.discountAmount || 0);
+    // Dùng trực tiếp giảm giá do Client gửi lên (Bao gồm cả KM và nhập tay nếu có)
+    const effectiveDiscountAmount = data.discountAmount || 0;
 
     // Merge gift items into calculation list (they go to invoice details and stock export)
     const allItemsWithCalculations = [...itemsWithCalculations, ...giftItems];
 
-    const totalAmount = subtotal + (Number(data.shippingFee) || 0) - effectiveDiscountAmount;
+    // Sử dụng trực tiếp dữ liệu chuẩn từ Client gửi lên thay vì tự tính lại
+    const computedAmount = data.amount || subtotal; // Tổng tiền hàng (trước thuế)
+    const totalAmount = data.totalAmount || (computedAmount + (Number(data.shippingFee) || 0) - effectiveDiscountAmount);
     const paidAmount = data.paidAmount || 0;
 
     // Validate payment amount vs total
@@ -576,7 +567,6 @@ class InvoiceService {
         isPickupOrder: true,
         totalAmount,
         amount: Number(data.amount) || totalAmount,
-        subTotal: Number(data.subTotal) || totalAmount,
         discountAmount,
         shippingFee: 0,
         taxAmount: Number(data.taxAmount) || 0,
@@ -594,22 +584,19 @@ class InvoiceService {
             quantity: item.quantity,
             baseQuantity: item.baseQuantity || item.quantity,
             conversionFactor: item.conversionFactor || 1,
-            unitPrice: item.unitPrice || item.price || 0,
             price: item.price || 0,
-            discountPercent: item.discountPercent || 0,
             discountRate: item.discountRate || 0,
             discountAmount: item.discountAmount || 0,
             taxRate: item.taxRate ? String(item.taxRate) : null,
             taxIds: item.taxIds || null,
             taxAmount: item.taxAmount || 0,
-            subTotal: item.subTotal || item.quantity * (item.price || 0),
             total: item.total || 0,
             periodMonths: item.periodMonths ? String(item.periodMonths) : null,
             warrantyCost: item.warrantyCost ? Number(item.warrantyCost) : 0,
             applyWarranty: item.applyWarranty || false,
             unitId: item.unitId || null,
             unitName: item.unitName || null,
-            notes: item.notes,
+            gift: item.isGift || false,
           })),
         },
       },
@@ -652,7 +639,6 @@ class InvoiceService {
         isPickupOrder: false,
         totalAmount,
         amount: Number(data.amount) || totalAmount,
-        subTotal: Number(data.subTotal) || totalAmount,
         discountAmount,
         shippingFee: Number(data.shippingFee) || 0,
         taxAmount: Number(data.taxAmount) || 0,
@@ -672,22 +658,19 @@ class InvoiceService {
             quantity: item.quantity,
             baseQuantity: item.baseQuantity || item.quantity,
             conversionFactor: item.conversionFactor || 1,
-            unitPrice: item.unitPrice || item.price || 0,
             price: item.price || 0,
-            discountPercent: item.discountPercent || 0,
             discountRate: item.discountRate || 0,
             discountAmount: item.discountAmount || 0,
             taxRate: item.taxRate ? String(item.taxRate) : null,
             taxIds: item.taxIds || null,
             taxAmount: item.taxAmount || 0,
-            subTotal: item.subTotal || item.quantity * (item.price || 0),
             total: item.total || 0,
             periodMonths: item.periodMonths ? String(item.periodMonths) : null,
             warrantyCost: item.warrantyCost ? Number(item.warrantyCost) : 0,
             applyWarranty: item.applyWarranty || false,
             unitId: item.unitId || null,
             unitName: item.unitName || null,
-            notes: item.notes,
+            gift: item.isGift || false,
           })),
         },
       },

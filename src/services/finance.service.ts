@@ -425,7 +425,6 @@ class FinanceService {
           id: true,
           customerCode: true,
           customerName: true,
-          classification: true,
           currentDebt: true,
           creditLimit: true,
           debtUpdatedAt: true,
@@ -440,7 +439,6 @@ class FinanceService {
         return {
           code: c.customerCode,
           name: c.customerName,
-          classification: c.classification,
           debt: Number(c.currentDebt || 0),
           creditLimit: Number(c.creditLimit || 0),
           overdue: daysOverdue > 30,

@@ -608,36 +608,35 @@ model StockTransferDetail {
 // =====================================================
 
 model Customer {
-  id              Int                    @id @default(autoincrement())
-  customerCode    String                 @unique @map("customer_code") @db.VarChar(50)
-  customerName    String                 @map("customer_name") @db.VarChar(200)
-  customerType    CustomerType           @map("customer_type")
-  classification  CustomerClassification @default(retail)
+  id              Int            @id @default(autoincrement())
+  customerCode    String         @unique @map("customer_code") @db.VarChar(50)
+  customerName    String         @map("customer_name") @db.VarChar(200)
+  customerType    CustomerType   @map("customer_type")
   gender          Gender?
-  contactPerson   String?                @map("contact_person") @db.VarChar(100)
-  phone           String?                @unique @db.VarChar(20)
-  email           String?                @db.VarChar(100)
-  avatarUrl       String?                @map("avatar_url") @db.VarChar(255)
-  address         String?                @db.VarChar(255)
-  taxCode         String?                @map("tax_code") @db.VarChar(50)
-  creditLimit     Decimal                @default(0) @map("credit_limit") @db.Decimal(15, 2)
-  currentDebt     Decimal                @default(0) @map("current_debt") @db.Decimal(15, 2)
-  debtUpdatedAt   DateTime?              @map("debt_updated_at")
-  cccd            String?                @unique @db.VarChar(20)
-  issuedAt        DateTime?              @map("issued_at") @db.Date
-  issuedBy        String?                @map("issued_by") @db.VarChar(100)
-  status          CustomerStatus         @default(active)
-  rewardPoints    Int                    @default(0) @map("reward_points")
-  rewardCode      String?                @map("reward_code") @db.VarChar(50)
-  notes           String?                @db.VarChar(255)
-  phoneVerifiedAt DateTime?              @map("phone_verified_at")
-  createdBy       Int?                   @map("created_by")
-  updatedBy       Int?                   @map("updated_by")
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
-  deletedAt       DateTime?              @map("deleted_at")
-  creator         User?                  @relation("CustomerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
-  updater         User?                  @relation("CustomerUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+  contactPerson   String?        @map("contact_person") @db.VarChar(100)
+  phone           String?        @unique @db.VarChar(20)
+  email           String?        @db.VarChar(100)
+  avatarUrl       String?        @map("avatar_url") @db.VarChar(255)
+  address         String?        @db.VarChar(255)
+  taxCode         String?        @map("tax_code") @db.VarChar(50)
+  creditLimit     Decimal        @default(0) @map("credit_limit") @db.Decimal(15, 2)
+  currentDebt     Decimal        @default(0) @map("current_debt") @db.Decimal(15, 2)
+  debtUpdatedAt   DateTime?      @map("debt_updated_at")
+  cccd            String?        @unique @db.VarChar(20)
+  issuedAt        DateTime?      @map("issued_at") @db.Date
+  issuedBy        String?        @map("issued_by") @db.VarChar(100)
+  status          CustomerStatus @default(active)
+  rewardPoints    Int            @default(0) @map("reward_points")
+  rewardCode      String?        @map("reward_code") @db.VarChar(50)
+  notes           String?        @db.VarChar(255)
+  phoneVerifiedAt DateTime?      @map("phone_verified_at")
+  createdBy       Int?           @map("created_by")
+  updatedBy       Int?           @map("updated_by")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  deletedAt       DateTime?      @map("deleted_at")
+  creator         User?          @relation("CustomerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  updater         User?          @relation("CustomerUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   // ✅ THÊM DÒNG NÀY:
   assignedUserId Int?  @map("assigned_user_id")
@@ -654,7 +653,6 @@ model Customer {
 
   @@index([customerCode])
   @@index([phone])
-  @@index([classification])
   @@index([status])
   @@index([customerName])
   @@index([assignedUserId])
@@ -745,7 +743,6 @@ model Invoice {
   isPickupOrder        Boolean       @default(false) @map("is_pickup_order")
   totalAmount          Decimal       @default(0) @map("total_amount") @db.Decimal(15, 2)
   amount               Decimal       @default(0) @db.Decimal(15, 2)
-  subTotal             Decimal       @default(0) @map("sub_total") @db.Decimal(15, 2)
   discountAmount       Decimal       @default(0) @map("discount_amount") @db.Decimal(15, 2)
   taxAmount            Decimal       @default(0) @map("tax_amount") @db.Decimal(15, 2)
   shippingFee          Decimal       @default(0) @map("shipping_fee") @db.Decimal(15, 2)
@@ -790,28 +787,26 @@ model Invoice {
 }
 
 model InvoiceDetail {
-  id               Int       @id @default(autoincrement())
-  orderId          Int       @map("order_id")
-  productId        Int       @map("product_id")
-  quantity         Decimal   @db.Decimal(15, 2)
-  baseQuantity     Decimal   @default(0) @map("base_quantity") @db.Decimal(15, 2)
-  conversionFactor Decimal   @default(1) @map("conversion_factor") @db.Decimal(10, 2)
-  price            Decimal   @default(0) @db.Decimal(15, 2)
-  discountRate     Decimal   @default(0) @map("discount_rate") @db.Decimal(5, 2)
-  discountAmount   Decimal   @default(0) @map("discount_amount") @db.Decimal(15, 2)
-  taxRate          String?   @map("tax_rate") @db.VarChar(50)
-  taxIds           Json?     @map("tax_ids")
-  taxAmount        Decimal   @default(0) @map("tax_amount") @db.Decimal(15, 2)
-  subTotal         Decimal   @default(0) @map("sub_total") @db.Decimal(15, 2)
-  total            Decimal   @default(0) @map("total") @db.Decimal(15, 2)
-  periodMonths     String?   @map("period_months") @db.VarChar(50)
-  warrantyCost     Decimal   @default(0) @map("warranty_cost") @db.Decimal(15, 2)
-  applyWarranty    Boolean   @default(false) @map("apply_warranty")
-  unitId           Int?      @map("unit_id")
-  unitName         String?   @map("unit_name") @db.VarChar(50)
-  batchNumber      String?   @map("batch_number") @db.VarChar(100)
-  expiryDate       DateTime? @map("expiry_date") @db.Date
-  notes            String?   @db.VarChar(255)
+  id               Int     @id @default(autoincrement())
+  orderId          Int     @map("order_id")
+  productId        Int     @map("product_id")
+  quantity         Decimal @db.Decimal(15, 2)
+  baseQuantity     Decimal @default(0) @map("base_quantity") @db.Decimal(15, 2)
+  conversionFactor Decimal @default(1) @map("conversion_factor") @db.Decimal(10, 2)
+  price            Decimal @default(0) @db.Decimal(15, 2)
+  discountRate     Decimal @default(0) @map("discount_rate") @db.Decimal(5, 2)
+  discountAmount   Decimal @default(0) @map("discount_amount") @db.Decimal(15, 2)
+  taxRate          String? @map("tax_rate") @db.VarChar(50)
+  taxIds           Json?   @map("tax_ids")
+  taxAmount        Decimal @default(0) @map("tax_amount") @db.Decimal(15, 2)
+  total            Decimal @default(0) @map("total") @db.Decimal(15, 2)
+  periodMonths     String? @map("period_months") @db.VarChar(50)
+  warrantyCost     Decimal @default(0) @map("warranty_cost") @db.Decimal(15, 2)
+  applyWarranty    Boolean @default(false) @map("apply_warranty")
+  unitId           Int?    @map("unit_id")
+  unitName         String? @map("unit_name") @db.VarChar(50)
+  batchNumber      String? @map("batch_number") @db.VarChar(100)
+  gift             Boolean @default(false)
 
   order   Invoice @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -1400,13 +1395,6 @@ enum MaterialType {
 enum CustomerType {
   individual
   company
-}
-
-enum CustomerClassification {
-  retail
-  wholesale
-  vip
-  distributor
 }
 
 enum CustomerStatus {

@@ -6,12 +6,22 @@ class InvoiceController {
   // GET /api/invoices - Get all sales orders
   async getAll(req: AuthRequest, res: Response) {
     const result = await invoiceService.getAll(req.query as any);
-
     res.status(200).json({
       success: true,
       data: result.data,
       meta: result.meta,
-      statistics: result.statistics,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // GET /api/invoices/by-user - Get all sales orders created by this user
+  async getAllByUser(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const result = await invoiceService.getAllByUser(req.query as any, userId);
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      meta: result.meta,
       timestamp: new Date().toISOString(),
     });
   }
@@ -20,7 +30,18 @@ class InvoiceController {
   async getById(req: AuthRequest, res: Response) {
     const id = parseInt(req.params.id);
     const order = await invoiceService.getById(id);
+    res.status(200).json({
+      success: true,
+      data: order,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
+  // GET /api/invoices/:id/by-user - Get detail only if created by this user
+  async getByIdForUser(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const userId = req.user!.id;
+    const order = await invoiceService.getByIdForUser(id, userId);
     res.status(200).json({
       success: true,
       data: order,

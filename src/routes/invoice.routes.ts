@@ -27,11 +27,26 @@ router.get(
   asyncHandler(invoiceController.getAll.bind(invoiceController))
 );
 
+// GET /api/invoices/by-user - Get all sales orders created by current user
+router.get(
+  '/by-user',
+  authorize('GET_INVOICE_USER'),
+  validate(invoiceQuerySchema, 'query'),
+  asyncHandler(invoiceController.getAllByUser.bind(invoiceController))
+);
+
 // GET /api/invoices/:id - Get sales order by ID
 router.get(
   '/:id',
   authorize('GET_INVOICE'),
   asyncHandler(invoiceController.getById.bind(invoiceController))
+);
+
+// GET /api/invoices/:id/by-user - Get detail only if created by current user
+router.get(
+  '/:id/by-user',
+  authorize('GET_INVOICE_USER'),
+  asyncHandler(invoiceController.getByIdForUser.bind(invoiceController))
 );
 
 // POST /api/invoices - Create new sales order

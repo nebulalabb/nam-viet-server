@@ -10,11 +10,9 @@ export const createInvoiceSchema = z.object({
     .string()
     .refine((val) => !isNaN(Date.parse(val)), 'Ngày đặt hàng không hợp lệ')
     .optional(),
-  note: z.string().optional().nullable(),
+
   taxAmount: z.number().optional(),
   amount: z.number().optional(),
-  discount: z.number().optional(),
-  subTotal: z.number().optional(),
   totalAmount: z.number().optional(),
   expectedDeliveryDate: z.string().optional().nullable(),
   requireApproval: z.boolean().optional(),
@@ -58,7 +56,7 @@ export const createInvoiceSchema = z.object({
         taxRate: z.union([z.number(), z.string()]).optional(),
         taxIds: z.array(z.number()).optional(),
         taxAmount: z.number().optional(),
-        subTotal: z.number().optional(),
+
         total: z.number().optional(),
         periodMonths: z.union([z.number(), z.string()]).optional(),
         warrantyCost: z.union([z.number(), z.string()]).optional(),

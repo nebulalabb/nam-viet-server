@@ -701,7 +701,6 @@ class ReportService {
           select: {
             id: true,
             customerName: true,
-            classification: true,
           },
         },
       },
@@ -1322,7 +1321,6 @@ class ReportService {
         id: true,
         customerCode: true,
         customerName: true,
-        classification: true,
         currentDebt: true,
       },
     });
@@ -1333,7 +1331,6 @@ class ReportService {
         customerId: item.customerId,
         customerCode: customer?.customerCode,
         customerName: customer?.customerName || 'Unknown',
-        classification: customer?.classification,
         totalRevenue: Number(item._sum.totalAmount || 0),
         totalPaid: Number(item._sum.paidAmount || 0),
         orderCount: item._count.id,
