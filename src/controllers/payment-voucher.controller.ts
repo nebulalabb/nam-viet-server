@@ -28,6 +28,20 @@ class PaymentVoucherController {
     });
   }
 
+  // GET /api/payment-vouchers/my-payment-vouchers - Get current user vouchers
+  async getMyPayments(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const result = await paymentVoucherService.getMyPayments(userId, req.query as any);
+
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      meta: result.meta,
+      statistics: result.statistics,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // GET /api/payment-vouchers/supplier/:supplierId - Get vouchers by supplier
   async getBySupplier(req: AuthRequest, res: Response) {
     const supplierId = parseInt(req.params.supplierId);

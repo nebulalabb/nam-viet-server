@@ -288,6 +288,7 @@ async function main() {
     { key: "CREATE_RECEIPT", name: "Thêm", module: "receipt", moduleLabel: "Phiếu thu" },
     { key: "UPDATE_RECEIPT", name: "Sửa", module: "receipt", moduleLabel: "Phiếu thu" },
     { key: "DELETE_RECEIPT", name: "Xóa", module: "receipt", moduleLabel: "Phiếu thu" },
+    { key: "APPROVE_RECEIPT", name: "Duyệt", module: "receipt", moduleLabel: "Phiếu thu" },
     { key: "POSTED_RECEIPT", name: "Ghi sổ", module: "receipt", moduleLabel: "Phiếu thu" },
     { key: "CANCEL_RECEIPT", name: "Hủy", module: "receipt", moduleLabel: "Phiếu thu" },
 
@@ -296,6 +297,7 @@ async function main() {
     { key: "CREATE_PAYMENT", name: "Thêm", module: "payment", moduleLabel: "Phiếu chi" },
     { key: "UPDATE_PAYMENT", name: "Sửa", module: "payment", moduleLabel: "Phiếu chi" },
     { key: "DELETE_PAYMENT", name: "Xóa", module: "payment", moduleLabel: "Phiếu chi" },
+    { key: "APPROVE_PAYMENT", name: "Duyệt", module: "payment", moduleLabel: "Phiếu chi" },
     { key: "POSTED_PAYMENT", name: "Ghi sổ", module: "payment", moduleLabel: "Phiếu chi" },
     { key: "CANCEL_PAYMENT", name: "Hủy", module: "payment", moduleLabel: "Phiếu chi" },
 
@@ -364,7 +366,18 @@ async function main() {
 
     // Khác
     { key: "GET_PERMISSION", name: "Xem quyền", module: "permission", moduleLabel: "Quyền hạn" },
-    { key: "GET_AUDIT_LOG", name: "Xem nhật ký hệ thống", module: "audit_log", moduleLabel: "Nhật ký hệ thống" }
+    { key: "GET_AUDIT_LOG", name: "Xem nhật ký hệ thống", module: "audit_log", moduleLabel: "Nhật ký hệ thống" },
+
+    // Quản lý giao hàng
+    { key: "VIEW_DELIVERIES", name: "Xem danh sách phiếu giao", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "CREATE_DELIVERY", name: "Tạo phiếu giao", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "UPDATE_DELIVERY", name: "Cập nhật phiếu giao", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "START_DELIVERY", name: "Bắt đầu đi giao", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "COMPLETE_DELIVERY", name: "Xác nhận giao hàng thành công", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "FAIL_DELIVERY", name: "Xác nhận giao hàng thất bại", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "SETTLE_COD", name: "Đối soát tiền COD", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "VIEW_DELIVERY_SETTLEMENT", name: "Xem báo cáo đối soát", module: "delivery", moduleLabel: "Giao hàng" },
+    { key: "DELETE_DELIVERY", name: "Xóa phiếu giao", module: "delivery", moduleLabel: "Giao hàng" }
   ];
 
 

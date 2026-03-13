@@ -21,36 +21,43 @@ router.use(authentication);
 // GET /api/payment-receipts/summary - Get summary (must be before /:id)
 router.get(
   '/summary',
-  authorize('view_payment_receipts'),
+  authorize('GET_RECEIPT'),
   asyncHandler(paymentReceiptController.getSummary.bind(paymentReceiptController))
 );
 
 // GET /api/payment-receipts/customer/:customerId - Get by customer (must be before /:id)
 router.get(
   '/customer/:customerId',
-  authorize('view_payment_receipts'),
+  authorize('GET_RECEIPT'),
   asyncHandler(paymentReceiptController.getByCustomer.bind(paymentReceiptController))
 );
 
 // GET /api/payment-receipts - Get all payment receipts
 router.get(
   '/',
-  authorize('view_payment_receipts'),
+  authorize('GET_RECEIPT'),
   validate(paymentReceiptQuerySchema, 'query'),
   asyncHandler(paymentReceiptController.getAll.bind(paymentReceiptController))
+);
+
+// GET /api/payment-receipts/my-receipts - Get current user receipts
+router.get(
+  '/my-receipts',
+  authorize('GET_RECEIPT'),
+  asyncHandler(paymentReceiptController.getMyReceipts.bind(paymentReceiptController))
 );
 
 // GET /api/payment-receipts/:id - Get payment receipt by ID
 router.get(
   '/:id',
-  authorize('view_payment_receipts'),
+  authorize('GET_RECEIPT'),
   asyncHandler(paymentReceiptController.getById.bind(paymentReceiptController))
 );
 
 // POST /api/payment-receipts - Create new payment receipt
 router.post(
   '/',
-  authorize('create_payment_receipt'),
+  authorize('CREATE_RECEIPT'),
   validate(createPaymentReceiptSchema),
   logActivityMiddleware('create', 'payment_receipt'),
   asyncHandler(paymentReceiptController.create.bind(paymentReceiptController))
@@ -59,7 +66,7 @@ router.post(
 // PUT /api/payment-receipts/:id - Update payment receipt
 router.put(
   '/:id',
-  authorize('update_payment_receipt'),
+  authorize('UPDATE_RECEIPT'),
   validate(updatePaymentReceiptSchema),
   logActivityMiddleware('update', 'payment_receipt'),
   asyncHandler(paymentReceiptController.update.bind(paymentReceiptController))
@@ -68,7 +75,7 @@ router.put(
 // PUT /api/payment-receipts/:id/approve - Approve receipt
 router.put(
   '/:id/approve',
-  authorize('approve_payment_receipt'),
+  authorize('APPROVE_RECEIPT'),
   validate(approveReceiptSchema),
   logActivityMiddleware('approve', 'payment_receipt'),
   asyncHandler(paymentReceiptController.approve.bind(paymentReceiptController))
@@ -77,7 +84,7 @@ router.put(
 // POST /api/payment-receipts/:id/post - Post receipt to accounting
 router.post(
   '/:id/post',
-  authorize('post_payment_receipt'),
+  authorize('POSTED_RECEIPT'),
   validate(postReceiptSchema),
   logActivityMiddleware('post', 'payment_receipt'),
   asyncHandler(paymentReceiptController.post.bind(paymentReceiptController))
@@ -86,7 +93,7 @@ router.post(
 // POST /api/payment-receipts/:id/send-email - Send email receipt
 router.post(
   '/:id/send-email',
-  authorize('send_email_payment_receipt'),
+  authorize('GET_RECEIPT'),
   logActivityMiddleware('send_email', 'payment_receipt'),
   asyncHandler(paymentReceiptController.sendEmail.bind(paymentReceiptController))
 );
@@ -94,7 +101,7 @@ router.post(
 // DELETE /api/payment-receipts/:id - Delete payment receipt
 router.delete(
   '/:id',
-  authorize('delete_payment_receipt'),
+  authorize('DELETE_RECEIPT'),
   logActivityMiddleware('delete', 'payment_receipt'),
   asyncHandler(paymentReceiptController.delete.bind(paymentReceiptController))
 );

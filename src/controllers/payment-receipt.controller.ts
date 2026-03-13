@@ -28,6 +28,20 @@ class PaymentReceiptController {
     });
   }
 
+  // GET /api/payment-receipts/my-receipts - Get current user receipts
+  async getMyReceipts(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const result = await paymentReceiptService.getMyReceipts(userId, req.query as any);
+
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      meta: result.meta,
+      statistics: result.statistics,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // GET /api/payment-receipts/customer/:customerId - Get receipts by customer
   async getByCustomer(req: AuthRequest, res: Response) {
     const customerId = parseInt(req.params.customerId);

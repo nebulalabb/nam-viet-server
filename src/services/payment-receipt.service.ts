@@ -47,6 +47,8 @@ class PaymentReceiptService {
       toDate,
     } = query;
 
+    const createdBy = (query as any).createdBy;
+
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -74,6 +76,7 @@ class PaymentReceiptService {
       ...(receiptType && { receiptType }),
       ...(paymentMethod && { paymentMethod }),
       ...(isPosted !== undefined && { isPosted }),
+      ...(createdBy && { createdBy }),
       ...approvalStatusWhere,
       ...postedStatusWhere,
       ...(search && {
@@ -211,6 +214,10 @@ class PaymentReceiptService {
     };
 
     return result;
+  }
+
+  async getMyReceipts(userId: number, query: PaymentReceiptQueryInput) {
+    return this.getAll({ ...query, createdBy: userId } as any);
   }
 
   async getById(id: number) {
