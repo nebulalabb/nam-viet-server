@@ -737,10 +737,10 @@ class CategoryService {
               where: { deletedAt: null },
             },
             products: {
-              where: { deletedAt: null }
-            },
-            materials: {
-              where: { deletedAt: null }
+              where: { 
+                deletedAt: null,
+                ...(type && { type: type as any })
+              }
             }
           },
         },
@@ -755,17 +755,17 @@ class CategoryService {
     
     // Switch count based on what we are looking for
     const itemCountLabel = type === 'MATERIAL' ? 'materialCount' : 'productCount';
-    const totalItems = categories.reduce((sum, c) => {
-        const count = type === 'MATERIAL' ? c._count.materials : c._count.products;
-        return sum + (count || 0);
-    }, 0);
+     const totalItems = categories.reduce((sum, c) => {
+         const count = c._count.products;
+         return sum + (count || 0);
+     }, 0);
 
     // Get top categories by item count
     const topCategories = categories
-      .map(c => ({
-          ...c,
-          itemCount: type === 'MATERIAL' ? c._count.materials : c._count.products
-      }))
+       .map(c => ({
+           ...c,
+           itemCount: c._count.products
+       }))
       .filter((c) => c.itemCount > 0)
       .sort((a, b) => b.itemCount - a.itemCount)
       .slice(0, 5)

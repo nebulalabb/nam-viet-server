@@ -69,9 +69,6 @@ import newsCategoryRoutes from '@routes/news-category.routes';
 // Contact routes
 import contactRoutes from '@routes/contact.routes';
 
-// Material Routes
-import materialRoutes from '@routes/material.routes';
-
 // CRM Routes
 import ticketRoutes from '@routes/ticket.routes';
 import taskRoutes from '@routes/task.routes';
@@ -252,8 +249,6 @@ app.use('/api/news', newsRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/news-categories', newsCategoryRoutes);
 
-// Material Routes
-app.use('/api/materials', materialRoutes);
 
 // CRM Routes
 app.use('/api/tickets', ticketRoutes);
