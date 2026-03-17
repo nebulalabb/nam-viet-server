@@ -158,6 +158,20 @@ router.get(
   asyncHandler(reportController.getInventoryStockFlow.bind(reportController))
 );
 
+// GET /api/reports/inventory/nxt-report - Inventory summary report (Nhập-Xuất-Tồn)
+router.get(
+  '/inventory/nxt-report',
+  authorize('GET_INVENTORY_REPORT'),
+  asyncHandler(reportController.getInventoryNXTReport.bind(reportController))
+);
+
+// GET /api/reports/inventory/ledger - Inventory detailed ledger (Sổ chi tiết vật tư)
+router.get(
+  '/inventory/ledger',
+  authorize('GET_INVENTORY_REPORT'),
+  asyncHandler(reportController.getInventoryLedger.bind(reportController))
+);
+
 // =====================================================
 // SALES REPORTS
 // =====================================================

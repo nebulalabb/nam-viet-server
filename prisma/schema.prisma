@@ -178,6 +178,11 @@ model User {
   createdExpiries         Expiry[]           @relation("ExpiryCreator")
   updatedExpiries         Expiry[]           @relation("ExpiryUpdater")
   createdUnits            Unit[]             @relation("UnitCreator")
+
+  warrantiesCreated       Warranty[]            @relation("WarrantyCreator")
+  warrantiesUpdated       Warranty[]            @relation("WarrantyUpdater")
+  warrantyPoliciesCreated WarrantyPolicy[]      @relation("WarrantyPolicyCreator")
+  warrantyPoliciesUpdated WarrantyPolicy[]      @relation("WarrantyPolicyUpdater")
   updatedUnits            Unit[]             @relation("UnitUpdater")
   createdTaxes            Tax[]              @relation("TaxCreator")
   updatedTaxes            Tax[]              @relation("TaxUpdater")
@@ -404,6 +409,9 @@ model Product {
   productMaterials        ProductMaterial[]     @relation("MainProduct")
   usedAsMaterial          ProductMaterial[]     @relation("MaterialComponent")
 
+  warranties       Warranty[]
+  warrantyPolicies WarrantyPolicy[]
+
   @@index([code])
   @@index([categoryId])
   @@index([supplierId])
@@ -627,6 +635,7 @@ model Customer {
   tickets         Ticket[]
   crmTasks        CrmTask[]
   expiryAccounts  CustomerExpiryAccount[]
+  warranties      Warranty[]
 
   @@index([customerCode])
   @@index([phone])
@@ -752,6 +761,7 @@ model Invoice {
   deliveries      Delivery[]
   paymentReceipts PaymentReceipt[]
   expiries        Expiry[]
+  warranties      Warranty[]
   warehouse       Warehouse?       @relation(fields: [warehouseId], references: [id])
   warehouseId     Int?
 
@@ -791,6 +801,7 @@ model InvoiceDetail {
   batches     InvoiceBatchDetail[] // Link to batches used to fulfill this detail
   warehouse   Warehouse?           @relation(fields: [warehouseId], references: [id])
   warehouseId Int?
+  warranties  Warranty[]
 
   @@index([orderId])
   @@index([productId])
@@ -1903,6 +1914,64 @@ model ProductHasAttribute {
   @@index([productId])
   @@index([attributeId])
   @@map("product_has_attributes")
+}
+
+model Warranty {
+  id               Int       @id @default(autoincrement())
+  customerId       Int       @map("customer_id")
+  productId        Int       @map("product_id")
+  invoiceId        Int       @map("invoice_id")
+  invoiceDetailId  Int?      @map("invoice_detail_id")
+  serialNumber     String?   @map("serial_number") @db.VarChar(100)
+  quantity         Decimal   @db.Decimal(15, 2)
+  startDate        DateTime? @map("start_date") @db.Date
+  endDate          DateTime? @map("end_date") @db.Date
+  status           String    @default("pending") @db.VarChar(50)
+  periodMonths     Int       @map("period_months")
+  warrantyCost     Decimal   @default(0) @map("warranty_cost") @db.Decimal(15, 2)
+  subTotal         Decimal   @default(0) @map("sub_total") @db.Decimal(15, 2)
+  amount           Decimal   @default(0) @db.Decimal(15, 2)
+  nextReminderDate DateTime? @map("next_reminder_date") @db.Date
+  lastReminderDate DateTime? @map("last_reminder_date") @db.Date
+  note             String?   @db.Text
+  createdBy        Int?      @map("created_by")
+  updatedBy        Int?      @map("updated_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  product       Product        @relation(fields: [productId], references: [id])
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  invoice       Invoice        @relation(fields: [invoiceId], references: [id])
+  invoiceDetail InvoiceDetail? @relation(fields: [invoiceDetailId], references: [id])
+  creator       User?          @relation("WarrantyCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  updater       User?          @relation("WarrantyUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([productId])
+  @@index([invoiceId])
+  @@index([status])
+  @@map("warranties")
+}
+
+model WarrantyPolicy {
+  id           Int      @id @default(autoincrement())
+  productId    Int      @map("product_id")
+  periodMonths Int      @map("period_months")
+  conditions   String?  @db.Text
+  warrantyCost Decimal  @default(0) @map("warranty_cost") @db.Decimal(15, 2)
+  status       String   @default("active") @db.VarChar(50)
+  createdBy    Int?     @map("created_by")
+  updatedBy    Int?     @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id])
+  creator User?   @relation("WarrantyPolicyCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  updater User?   @relation("WarrantyPolicyUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@map("warranty_policies")
 }
 
 model ProductUnitConversion {

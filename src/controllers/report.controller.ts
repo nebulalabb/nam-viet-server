@@ -229,6 +229,42 @@ class ReportController {
     });
   }
 
+  // GET /api/reports/inventory/nxt-report - Inventory summary report
+  async getInventoryNXTReport(req: AuthRequest, res: Response) {
+    const result = await reportService.getInventoryNXTReport(req.query as any);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // GET /api/reports/inventory/ledger - Inventory detailed ledger
+  async getInventoryLedger(req: AuthRequest, res: Response) {
+    const { productId, fromDate, toDate, warehouseId } = req.query;
+    
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'productId is required' }
+      });
+    }
+
+    const result = await reportService.getInventoryLedger({
+      productId: parseInt(productId as string),
+      fromDate: fromDate as string,
+      toDate: toDate as string,
+      warehouseId: warehouseId ? parseInt(warehouseId as string) : undefined
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // GET /api/reports/sales/top-products - Top selling products
   async getTopSellingProducts(req: AuthRequest, res: Response) {
     const { limit, fromDate, toDate } = req.query;

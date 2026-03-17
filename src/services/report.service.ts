@@ -1080,6 +1080,7 @@ class ReportService {
             gte: dateRange.fromDate,
             lte: dateRange.toDate,
           },
+          ...(warehouseId && { warehouseId }),
         },
       },
       include: {
@@ -1132,6 +1133,272 @@ class ReportService {
     });
 
     return stockFlow;
+  }
+
+  async getInventoryNXTReport(params: {
+    fromDate?: string;
+    toDate?: string;
+    warehouseId?: number;
+    categoryId?: number;
+  }) {
+    const { fromDate, toDate, warehouseId, categoryId } = params;
+    const dateRange = this.getDateRange(fromDate, toDate);
+
+    // 1. Get products and current inventory
+    const inventory = await prisma.inventory.findMany({
+      where: {
+        ...(warehouseId && { warehouseId }),
+        ...(categoryId && {
+          product: {
+            categoryId,
+          },
+        }),
+      },
+      include: {
+        product: {
+          include: {
+            unit: true,
+            category: true,
+          },
+        },
+      },
+    });
+
+    // 2. Get all transactions from fromDate to NOW to calculate opening stock
+    // OpeningStock = CurrentStock - sum(Changes from fromDate to NOW)
+    const transactionsAfterFrom = await prisma.stockTransactionDetail.findMany({
+      where: {
+        transaction: {
+          createdAt: { gte: dateRange.fromDate },
+          isPosted: true,
+          ...(warehouseId && { warehouseId }),
+        },
+      },
+      include: {
+        transaction: { select: { transactionType: true, createdAt: true } },
+      },
+    });
+
+    // 3. Get transactions within period for report
+    const transactionsWithinPeriod = transactionsAfterFrom.filter(
+      (t) => t.transaction.createdAt <= dateRange.toDate
+    );
+
+    // Group transactions by product
+    const changesAfterFrom: Record<number, { imports: number; exports: number }> = {};
+    const changesWithinPeriod: Record<number, { imports: number; exports: number }> = {};
+
+    transactionsAfterFrom.forEach((t) => {
+      const pId = t.productId;
+      if (!changesAfterFrom[pId]) changesAfterFrom[pId] = { imports: 0, exports: 0 };
+      
+      const qty = Number(t.quantity);
+      if (['import', 'transfer_in', 'return'].includes(t.transaction.transactionType)) {
+        changesAfterFrom[pId].imports += qty;
+      } else if (['export', 'transfer_out', 'disposal'].includes(t.transaction.transactionType)) {
+        changesAfterFrom[pId].exports += qty;
+      }
+    });
+
+    transactionsWithinPeriod.forEach((t) => {
+      const pId = t.productId;
+      if (!changesWithinPeriod[pId]) changesWithinPeriod[pId] = { imports: 0, exports: 0 };
+      
+      const qty = Number(t.quantity);
+      if (['import', 'transfer_in', 'return'].includes(t.transaction.transactionType)) {
+        changesWithinPeriod[pId].imports += qty;
+      } else if (['export', 'transfer_out', 'disposal'].includes(t.transaction.transactionType)) {
+        changesWithinPeriod[pId].exports += qty;
+      }
+    });
+
+    // 4. Build report data
+    const report = inventory.map((inv) => {
+      const pId = inv.productId;
+      const product = inv.product;
+      const basePrice = Number(product.basePrice || 0);
+      
+      const afterFrom = changesAfterFrom[pId] || { imports: 0, exports: 0 };
+      const withinPeriod = changesWithinPeriod[pId] || { imports: 0, exports: 0 };
+      
+      const currentQty = Number(inv.quantity);
+      // Opening = Current - (Imports-After-From) + (Exports-After-From)
+      const openingQuantity = currentQty - afterFrom.imports + afterFrom.exports;
+      
+      const quantityIn = withinPeriod.imports;
+      const quantityOut = withinPeriod.exports;
+      
+      const closingQuantity = openingQuantity + quantityIn - quantityOut;
+
+      return {
+        productId: pId,
+        product: {
+          id: product.id,
+          name: product.productName,
+          code: product.code,
+          unit: product.unit ? { name: (product.unit as any).unitName } : null,
+          category: product.category ? { name: (product.category as any).categoryName } : null,
+        },
+        openingQuantity: Math.max(0, openingQuantity),
+        openingAmount: Math.max(0, openingQuantity) * basePrice,
+        quantityIn,
+        amountIn: quantityIn * basePrice,
+        quantityOut,
+        amountOut: quantityOut * basePrice,
+        closingQuantity,
+        closingAmount: closingQuantity * basePrice,
+        averageUnitPrice: basePrice,
+      };
+    });
+
+    return report;
+  }
+
+  async getInventoryLedger(params: {
+    productId: number;
+    fromDate?: string;
+    toDate?: string;
+    warehouseId?: number;
+  }) {
+    const { productId, fromDate, toDate, warehouseId } = params;
+    const dateRange = this.getDateRange(fromDate, toDate);
+
+    // 1. Get product info
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { unit: true },
+    });
+
+    if (!product) {
+      throw new Error('Sản phẩm không tồn tại');
+    }
+
+    const basePrice = Number(product.basePrice || 0);
+
+    // 2. Fetch all relevant transactions for opening balance
+    const openingTransactions = await prisma.stockTransactionDetail.findMany({
+      where: {
+        productId,
+        transaction: {
+          isPosted: true,
+          createdAt: { lt: dateRange.fromDate },
+          ...(warehouseId && {
+            OR: [
+              { warehouseId },
+              { sourceWarehouseId: warehouseId },
+              { destinationWarehouseId: warehouseId },
+            ],
+          }),
+        },
+      },
+      include: {
+        transaction: true,
+      },
+    });
+
+    let openingQty = 0;
+    openingTransactions.forEach((t: any) => {
+      const qty = Number(t.quantity);
+      const tt = t.transaction;
+      const type = tt.transactionType;
+      
+      if (type === 'transfer') {
+        if (warehouseId) {
+          if (tt.sourceWarehouseId === warehouseId) openingQty -= qty;
+          else if (tt.destinationWarehouseId === warehouseId) openingQty += qty;
+        }
+      } else if (['import', 'stocktake', 'return', 'transfer_in'].includes(type as string)) {
+        openingQty += qty;
+      } else if (['export', 'disposal', 'transfer_out'].includes(type as string)) {
+        openingQty -= qty;
+      }
+    });
+
+    // 3. Get transactions within period
+    const periodTransactions = await prisma.stockTransactionDetail.findMany({
+      where: {
+        productId,
+        transaction: {
+          isPosted: true,
+          createdAt: {
+            gte: dateRange.fromDate,
+            lte: dateRange.toDate,
+          },
+          ...(warehouseId && {
+            OR: [
+              { warehouseId },
+              { sourceWarehouseId: warehouseId },
+              { destinationWarehouseId: warehouseId },
+            ],
+          }),
+        },
+      },
+      include: {
+        transaction: {
+          include: {
+            creator: { select: { fullName: true } },
+          }
+        },
+        product: {
+          include: { unit: true }
+        }
+      },
+      orderBy: {
+        transaction: {
+          createdAt: 'asc',
+        },
+      },
+    });
+
+    let runningQty = openingQty;
+    const data = periodTransactions.map((t: any) => {
+      const qty = Number(t.quantity);
+      const tt = t.transaction;
+      const type = tt.transactionType;
+      let qtyIn = 0;
+      let qtyOut = 0;
+
+      if (type === 'transfer') {
+        if (warehouseId) {
+          if (tt.sourceWarehouseId === warehouseId) qtyOut = qty;
+          else if (tt.destinationWarehouseId === warehouseId) qtyIn = qty;
+        }
+      } else if (['import', 'stocktake', 'return', 'transfer_in'].includes(type as string)) {
+        qtyIn = qty;
+      } else if (['export', 'disposal', 'transfer_out'].includes(type as string)) {
+        qtyOut = qty;
+      }
+
+      runningQty += (qtyIn - qtyOut);
+
+      return {
+        documentCode: tt.transactionCode,
+        postingDate: tt.createdAt,
+        description: tt.reason || tt.notes || '',
+        objectName: '', 
+        unit: t.product?.unit ? { name: t.product.unit.unitName } : null,
+        qtyIn,
+        amountIn: qtyIn * basePrice,
+        qtyOut,
+        amountOut: qtyOut * basePrice,
+        balanceQty: runningQty,
+        balanceAmount: runningQty * basePrice,
+        unitCost: basePrice,
+      };
+    });
+
+    return {
+      product: {
+        id: product.id,
+        name: product.productName,
+        code: product.code,
+      },
+      openingBalance: {
+        quantity: openingQty,
+        amount: openingQty * basePrice,
+      },
+      data,
+    };
   }
 
   async getInventoryByType(warehouseId?: number) {

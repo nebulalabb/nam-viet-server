@@ -60,6 +60,7 @@ import attributeRoutes from '@routes/attribute.routes';
 
 import smartDebtRoutes from '@routes/smart-debt.routes';
 import expiryRoutes from '@routes/expiry.routes';
+import warrantyRoutes from '@routes/warranty.routes';
 
 // News routes
 import newsRoutes from '@routes/news.routes';
@@ -242,6 +243,7 @@ app.use('/api/attributes', attributeRoutes);
 
 // Smart Debt routes
 app.use('/api/smart-debt', smartDebtRoutes);
+app.use('/api/warranty', warrantyRoutes);
 
 // News routes
 app.use('/api/news', newsRoutes);
