@@ -47,7 +47,7 @@ router.use(authentication);
 // GET /api/attendance - Get all attendance records (Admin/Manager)
 router.get(
   '/',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   validate(attendanceQuerySchema, 'query'),
   asyncHandler(attendanceController.getAll.bind(attendanceController))
 );
@@ -62,7 +62,7 @@ router.get(
 // GET /api/attendance/report - Monthly attendance report
 router.get(
   '/report',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   validate(monthlyReportSchema, 'query'),
   asyncHandler(attendanceController.getMonthlyReport.bind(attendanceController))
 );
@@ -70,7 +70,7 @@ router.get(
 // GET /api/attendance/statistics - User attendance statistics
 router.get(
   '/statistics',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   validate(attendanceQuerySchema, 'query'),
   asyncHandler(attendanceController.getUserStatistics.bind(attendanceController))
 );
@@ -78,7 +78,7 @@ router.get(
 // GET /api/attendance/:id - Get attendance by ID
 router.get(
   '/:id',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   asyncHandler(attendanceController.getById.bind(attendanceController))
 );
 
@@ -109,7 +109,7 @@ router.post(
 // PUT /api/attendance/:id - Update attendance (Admin)
 router.put(
   '/:id',
-  authorize('update_attendance'),
+  authorize('UPDATE_ATTENDANCE'),
   validate(updateAttendanceSchema),
   logActivityMiddleware('update', 'attendance'),
   asyncHandler(attendanceController.update.bind(attendanceController))
@@ -118,7 +118,7 @@ router.put(
 // PUT /api/attendance/:id/approve - Approve/Reject leave
 router.put(
   '/:id/approve',
-  authorize('approve_leave'),
+  authorize('APPROVE_LEAVE'),
   validate(approveLeaveSchema),
   logActivityMiddleware('approve leave', 'attendance'),
   asyncHandler(attendanceController.approveLeave.bind(attendanceController))
@@ -127,7 +127,7 @@ router.put(
 // POST /api/attendance/lock-month - Lock attendance month
 router.post(
   '/lock-month',
-  authorize('update_attendance'),
+  authorize('UPDATE_ATTENDANCE'),
   validate(lockMonthSchema, 'body'),
   logActivityMiddleware('lock month', 'attendance'),
   asyncHandler(attendanceController.lockMonth.bind(attendanceController))
@@ -136,7 +136,7 @@ router.post(
 // POST /api/attendance/import - Import attendance from file
 router.post(
   '/import',
-  authorize('update_attendance'),
+  authorize('UPDATE_ATTENDANCE'),
   upload.single('file'),
   logActivityMiddleware('import', 'attendance'),
   asyncHandler(attendanceController.importFromFile.bind(attendanceController))
@@ -145,7 +145,7 @@ router.post(
 // DELETE /api/attendance/:id - Delete attendance (Admin)
 router.delete(
   '/:id',
-  authorize('delete_attendance'),
+  authorize('DELETE_ATTENDANCE'),
   logActivityMiddleware('delete', 'attendance'),
   asyncHandler(attendanceController.delete.bind(attendanceController))
 );
@@ -157,7 +157,7 @@ router.delete(
 // POST /api/attendance/qr/generate - Generate QR code for attendance
 router.post(
   '/qr/generate',
-  authorize('update_attendance'),
+  authorize('UPDATE_ATTENDANCE'),
   validate(generateQRSchema),
   logActivityMiddleware('generate QR', 'attendance'),
   asyncHandler(qrCodeController.generate.bind(qrCodeController))
@@ -174,21 +174,21 @@ router.post(
 // GET /api/attendance/qr - Get all QR codes
 router.get(
   '/qr',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   asyncHandler(qrCodeController.getAll.bind(qrCodeController))
 );
 
 // GET /api/attendance/qr/:id - Get QR code by ID
 router.get(
   '/qr/:id',
-  authorize('view_attendance'),
+  authorize('VIEW_ATTENDANCE'),
   asyncHandler(qrCodeController.getById.bind(qrCodeController))
 );
 
 // PUT /api/attendance/qr/:id/deactivate - Deactivate QR code
 router.put(
   '/qr/:id/deactivate',
-  authorize('update_attendance'),
+  authorize('UPDATE_ATTENDANCE'),
   logActivityMiddleware('deactivate QR', 'attendance'),
   asyncHandler(qrCodeController.deactivate.bind(qrCodeController))
 );
@@ -196,7 +196,7 @@ router.put(
 // DELETE /api/attendance/qr/:id - Delete QR code
 router.delete(
   '/qr/:id',
-  authorize('delete_attendance'),
+  authorize('DELETE_ATTENDANCE'),
   logActivityMiddleware('delete QR', 'attendance'),
   asyncHandler(qrCodeController.delete.bind(qrCodeController))
 );

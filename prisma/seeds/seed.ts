@@ -21,65 +21,82 @@ async function main() {
 
   try {
     // Delete in correct order to respect foreign key constraints
-    await prisma.customerAccount.deleteMany({});
-    console.log('   ✓ Deleted CustomerAccounts');
-
+    // 1. Logs & History
     await prisma.activityLog.deleteMany({});
-    console.log('   ✓ Deleted ActivityLogs');
-
+    await prisma.loginHistory.deleteMany({});
+    await prisma.notification.deleteMany({});
     await prisma.verificationCode.deleteMany({});
-    console.log('   ✓ Deleted VerificationCodes');
 
-    await prisma.rolePermission.deleteMany({});
-    console.log('   ✓ Deleted RolePermissions');
+    // 2. HR & Attendance
+    await prisma.overtimeEntry.deleteMany({});
+    await prisma.overtimeSession.deleteMany({});
+    await prisma.salary.deleteMany({});
+    await prisma.attendanceQRLog.deleteMany({});
+    await prisma.attendanceQRCode.deleteMany({});
+    await prisma.attendance.deleteMany({});
+    await prisma.attendanceMonth.deleteMany({});
 
-    // Need to remove relations from warehouse & customers to user first if any strict FKs exist
-    // Prisma deleteMany will fail if other tables reference User. Let's delete dependent tables first
+    // 3. CRM & Tickets
+    await prisma.crmTask.deleteMany({});
+    await prisma.ticket.deleteMany({});
+
+    // 4. Sales / Invoicing (Heavy dependencies)
+    await prisma.delivery.deleteMany({});
+    await prisma.paymentReceipt.deleteMany({});
+    await prisma.warranty.deleteMany({});
+    await prisma.warrantyPolicy.deleteMany({});
+    await prisma.expiry.deleteMany({});
+    await prisma.invoiceBatchDetail.deleteMany({});
+    await prisma.invoiceDetail.deleteMany({});
+    await prisma.invoice.deleteMany({});
+
+    // 5. Purchases
+    await prisma.purchaseOrderDetail.deleteMany({});
+    await prisma.purchaseOrder.deleteMany({});
+    await prisma.paymentVoucher.deleteMany({});
+
+    // 6. Inventory & Stock
     await prisma.stockTransferDetail.deleteMany({});
     await prisma.stockTransfer.deleteMany({});
     await prisma.stockTransactionDetail.deleteMany({});
     await prisma.stockTransaction.deleteMany({});
-    await prisma.invoiceDetail.deleteMany({});
-    await prisma.invoice.deleteMany({});
-    await prisma.purchaseOrderDetail.deleteMany({});
-    await prisma.purchaseOrder.deleteMany({});
-    await prisma.paymentVoucher.deleteMany({});
-    await prisma.paymentReceipt.deleteMany({});
-
-    await prisma.crmTask.deleteMany({});
-    await prisma.ticket.deleteMany({});
-
-    await prisma.customer.deleteMany({});
-    console.log('   ✓ Deleted Customers');
-
-    await prisma.supplier.deleteMany({});
-    console.log('   ✓ Deleted Suppliers');
-
-    await prisma.promotionProduct.deleteMany({});
+    await prisma.inventoryBatch.deleteMany({});
     await prisma.inventory.deleteMany({});
-    await prisma.product.deleteMany({});
-    console.log('   ✓ Deleted Products');
 
-    await prisma.warehouse.deleteMany({});
-    console.log('   ✓ Deleted Warehouses');
-
+    // 7. News & Content
     await prisma.newsTagRelation.deleteMany({});
     await prisma.newsTag.deleteMany({});
     await prisma.news.deleteMany({});
     await prisma.newsCategory.deleteMany({});
-    await prisma.attendanceQRLog.deleteMany({});
-    await prisma.attendanceQRCode.deleteMany({});
-    await prisma.loginHistory.deleteMany({});
-    await prisma.userPermission.deleteMany({});
-    await prisma.notification.deleteMany({});
-    await prisma.overtimeEntry.deleteMany({});
-    await prisma.overtimeSession.deleteMany({});
-    await prisma.salary.deleteMany({});
-    await prisma.attendance.deleteMany({});
-    await prisma.attendanceMonth.deleteMany({});
+
+    // 8. Core Master Data
+    await prisma.promotionProduct.deleteMany({});
     await prisma.promotion.deleteMany({});
-    await prisma.delivery.deleteMany({});
+    await prisma.customerAccount.deleteMany({});
+    await prisma.customerExpiryAccount.deleteMany({}); // Added
+    await prisma.customer.deleteMany({});
+    await prisma.supplier.deleteMany({});
+    
+    await prisma.productHasAttribute.deleteMany({});
+    await prisma.productUnitConversion.deleteMany({});
+    await prisma.productPriceHistory.deleteMany({});
+    await prisma.productMaterial.deleteMany({});
+    await prisma.product.deleteMany({});
+    
+    await prisma.warehouse.deleteMany({});
+    await prisma.category.deleteMany({});
+    await prisma.attribute.deleteMany({});
+    await prisma.unit.deleteMany({});
+    await prisma.tax.deleteMany({});
+    await prisma.debtPeriod.deleteMany({});
     await prisma.generalSetting.deleteMany({});
+
+    // 9. Auth & Roles
+    await prisma.userPermission.deleteMany({});
+    await prisma.rolePermission.deleteMany({});
+    await prisma.user.deleteMany({});
+    await prisma.permission.deleteMany({});
+    await prisma.role.deleteMany({});
 
     await prisma.user.deleteMany({});
     console.log('   ✓ Deleted Users');
@@ -200,6 +217,20 @@ async function main() {
     { key: "CREATE_USER", name: "Thêm", module: "user", moduleLabel: "Nhân sự" },
     { key: "UPDATE_USER", name: "Sửa", module: "user", moduleLabel: "Nhân sự" },
     { key: "DELETE_USER", name: "Xóa", module: "user", moduleLabel: "Nhân sự" },
+    
+    // Quản lý Chấm công
+    { key: "VIEW_ATTENDANCE", name: "Xem bảng công", module: "attendance", moduleLabel: "Chấm công" },
+    { key: "UPDATE_ATTENDANCE", name: "Cập nhật bảng công", module: "attendance", moduleLabel: "Chấm công" },
+    { key: "DELETE_ATTENDANCE", name: "Xóa log chấm công", module: "attendance", moduleLabel: "Chấm công" },
+    { key: "APPROVE_LEAVE", name: "Duyệt xin nghỉ", module: "attendance", moduleLabel: "Chấm công" },
+
+    // Quản lý Lương
+    { key: "VIEW_SALARY", name: "Xem bảng lương", module: "salary", moduleLabel: "Lương" },
+    { key: "UPDATE_SALARY", name: "Cập nhật lương", module: "salary", moduleLabel: "Lương" },
+    { key: "DELETE_SALARY", name: "Xóa bảng lương", module: "salary", moduleLabel: "Lương" },
+    { key: "CALCULATE_SALARY", name: "Tính lương", module: "salary", moduleLabel: "Lương" },
+    { key: "APPROVE_SALARY", name: "Duyệt lương", module: "salary", moduleLabel: "Lương" },
+    { key: "PAY_SALARY", name: "Thanh toán lương", module: "salary", moduleLabel: "Lương" },
 
     // Quản lý vai trò
     { key: "GET_ROLE", name: "Xem", module: "role", moduleLabel: "Vai trò" },

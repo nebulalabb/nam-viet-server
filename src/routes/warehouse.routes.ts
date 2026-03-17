@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import warehouseController from '@controllers/warehouse.controller';
 import { authentication } from '@middlewares/auth';
-import { authorize, authorizeAny } from '@middlewares/authorize';
+import { authorize } from '@middlewares/authorize';
 import { validate } from '@middlewares/validate';
 import { asyncHandler } from '@middlewares/errorHandler';
 import {

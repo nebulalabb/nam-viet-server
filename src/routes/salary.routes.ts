@@ -23,7 +23,7 @@ router.use(authentication);
 // GET /api/salary - Get all salary records
 router.get(
   '/',
-  authorize('view_salary'),
+  authorize('VIEW_SALARY'),
   validate(salaryQuerySchema, 'query'),
   asyncHandler(salaryController.getAll.bind(salaryController))
 );
@@ -31,14 +31,14 @@ router.get(
 // GET /api/salary/summary - Get salary summary
 router.get(
   '/summary',
-  authorize('view_salary'),
+  authorize('VIEW_SALARY'),
   asyncHandler(salaryController.getSummary.bind(salaryController))
 );
 
 // GET /api/salary/:userId/:month - Get salary by user and month
 router.get(
   '/:userId/:month',
-  authorize('view_salary'),
+  authorize('VIEW_SALARY'),
   validate(getSalaryByUserMonthSchema),
   asyncHandler(salaryController.getByUserAndMonth.bind(salaryController))
 );
@@ -46,14 +46,14 @@ router.get(
 // GET /api/salary/:id - Get salary by ID
 router.get(
   '/:id',
-  authorize('view_salary'),
+  authorize('VIEW_SALARY'),
   asyncHandler(salaryController.getById.bind(salaryController))
 );
 
 // POST /api/salary/calculate - Calculate salary
 router.post(
   '/calculate',
-  authorize('calculate_salary'),
+  authorize('CALCULATE_SALARY'),
   validate(calculateSalarySchema),
   asyncHandler(salaryController.calculate.bind(salaryController))
 );
@@ -61,7 +61,7 @@ router.post(
 // POST /api/salary/calculate-batch - Calculate batch salaries
 router.post(
   '/calculate-batch',
-  authorize('calculate_salary'),
+  authorize('CALCULATE_SALARY'),
   validate(calculateBatchSalarySchema),
   asyncHandler(salaryController.calculateBatch.bind(salaryController))
 );
@@ -69,7 +69,7 @@ router.post(
 // POST /api/salary/:id/recalculate - Recalculate salary
 router.post(
   '/:id/recalculate',
-  authorize('calculate_salary'),
+  authorize('CALCULATE_SALARY'),
   validate(recalculateSalarySchema),
   asyncHandler(salaryController.recalculate.bind(salaryController))
 );
@@ -77,7 +77,7 @@ router.post(
 // PUT /api/salary/:id - Update salary
 router.put(
   '/:id',
-  authorize('update_salary'),
+  authorize('UPDATE_SALARY'),
   validate(updateSalarySchema),
   asyncHandler(salaryController.update.bind(salaryController))
 );
@@ -85,7 +85,7 @@ router.put(
 // PUT /api/salary/:id/approve - Approve salary
 router.put(
   '/:id/approve',
-  authorize('approve_salary'),
+  authorize('APPROVE_SALARY'),
   validate(approveSalarySchema),
   asyncHandler(salaryController.approve.bind(salaryController))
 );
@@ -93,7 +93,7 @@ router.put(
 // POST /api/salary/:id/pay - Pay salary (create payment voucher)
 router.post(
   '/:id/pay',
-  authorize('pay_salary'),
+  authorize('PAY_SALARY'),
   validate(paySalarySchema),
   asyncHandler(salaryController.pay.bind(salaryController))
 );
@@ -101,7 +101,7 @@ router.post(
 // DELETE /api/salary/:id - Delete salary
 router.delete(
   '/:id',
-  authorize('delete_salary'),
+  authorize('DELETE_SALARY'),
   asyncHandler(salaryController.delete.bind(salaryController))
 );
 
