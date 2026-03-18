@@ -16,8 +16,15 @@ const updatePurchaseOrderDetailSchema = z.object({
 });
 
 export const createPurchaseOrderSchema = z.object({
-  supplierId: z.number().int().positive('ID nhà cung cấp không hợp lệ'),
-  warehouseId: z.number().int().positive('ID kho không hợp lệ'),
+  supplierId: z.number().int().positive('ID nhà cung cấp không hợp lệ').optional().nullable(),
+  newSupplier: z.object({
+    name: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    address: z.string().optional(),
+    taxCode: z.string().optional(),
+  }).optional().nullable(),
+  warehouseId: z.number().int().positive('ID kho không hợp lệ').optional().nullable(),
   orderDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Định dạng ngày không hợp lệ (YYYY-MM-DD)')
@@ -36,7 +43,14 @@ export const createPurchaseOrderSchema = z.object({
 });
 
 export const updatePurchaseOrderSchema = z.object({
-  supplierId: z.number().int().positive('ID nhà cung cấp không hợp lệ').optional(),
+  supplierId: z.number().int().positive('ID nhà cung cấp không hợp lệ').optional().nullable(),
+  newSupplier: z.object({
+    name: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    address: z.string().optional(),
+    taxCode: z.string().optional(),
+  }).optional().nullable(),
   warehouseId: z.number().int().positive('ID kho không hợp lệ').optional(),
   orderDate: z
     .string()

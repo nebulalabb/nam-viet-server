@@ -206,20 +206,70 @@ class PurchaseOrderService {
   }
 
   async create(data: CreatePurchaseOrderInput, userId: number) {
-    // Validate supplier
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: data.supplierId },
-    });
-    if (!supplier) {
-      throw new NotFoundError('Supplier');
+    let supplierId = data.supplierId;
+    let validatedSupplier: any = null;
+
+    // Handle Supplier logic
+    if (supplierId) {
+      validatedSupplier = await prisma.supplier.findUnique({
+        where: { id: Number(supplierId) },
+      });
+      if (!validatedSupplier) {
+        throw new NotFoundError('Supplier');
+      }
+      if (validatedSupplier.status !== 'active') {
+        throw new ValidationError('Nhà cung cấp phải ở trạng thái hoạt động để tạo đơn hàng');
+      }
+
+      // If newSupplier data is provided while supplierId exists, update the supplier
+      if (data.newSupplier) {
+        await prisma.supplier.update({
+          where: { id: Number(supplierId) },
+          data: {
+            supplierName: data.newSupplier.name || validatedSupplier.supplierName,
+            phone: data.newSupplier.phone || validatedSupplier.phone,
+            email: data.newSupplier.email || validatedSupplier.email,
+            address: data.newSupplier.address || validatedSupplier.address,
+            taxCode: data.newSupplier.taxCode || validatedSupplier.taxCode,
+          }
+        });
+      }
+    } else if (data.newSupplier) {
+      // Create new supplier
+      const newSup = await prisma.supplier.create({
+        data: {
+          supplierName: data.newSupplier.name || 'Nhà cung cấp mới',
+          supplierCode: `NCC-${Date.now()}`,
+          supplierType: 'local',
+          phone: data.newSupplier.phone || '',
+          email: data.newSupplier.email || null,
+          address: data.newSupplier.address || null,
+          taxCode: data.newSupplier.taxCode || null,
+          status: 'active',
+          createdBy: userId,
+        }
+      });
+      supplierId = newSup.id;
+      validatedSupplier = newSup;
+    } else {
+      throw new ValidationError('Thông tin nhà cung cấp không hợp lệ. Vui lòng chọn nhà cung cấp hoặc cung cấp thông tin mới.');
     }
 
-    // Validate warehouse
-    const warehouse = await prisma.warehouse.findUnique({
-      where: { id: data.warehouseId },
-    });
-    if (!warehouse) {
-      throw new NotFoundError('Warehouse');
+    // Validate warehouse - optional, fallback to first warehouse
+    let warehouseId = data.warehouseId;
+    if (warehouseId) {
+      const warehouse = await prisma.warehouse.findUnique({
+        where: { id: warehouseId },
+      });
+      if (!warehouse) {
+        throw new NotFoundError('Warehouse');
+      }
+    } else {
+      // Fallback: use first available warehouse
+      const defaultWarehouse = await prisma.warehouse.findFirst();
+      if (defaultWarehouse) {
+        warehouseId = defaultWarehouse.id;
+      }
     }
 
     // Validate products
@@ -244,8 +294,8 @@ class PurchaseOrderService {
     const purchaseOrder = await prisma.purchaseOrder.create({
       data: {
         poCode,
-        supplierId: data.supplierId,
-        warehouseId: data.warehouseId,
+        supplierId: supplierId as number,
+        warehouseId: warehouseId as number,
         orderDate: new Date(data.orderDate),
         expectedDeliveryDate: data.expectedDeliveryDate
           ? new Date(data.expectedDeliveryDate)
@@ -300,13 +350,44 @@ class PurchaseOrderService {
       throw new ValidationError('Chỉ đơn mua ở trạng thái chờ duyệt mới có thể update');
     }
 
-    // Validate supplier if provided
-    if (data.supplierId) {
-      const supplier = await prisma.supplier.findUnique({
-        where: { id: data.supplierId },
-      });
-      if (!supplier) {
-        throw new NotFoundError('Supplier');
+    let supplierId = data.supplierId || purchaseOrder.supplierId;
+    if (data.supplierId || data.newSupplier) {
+      if (data.supplierId) {
+        const validatedSupplier = await prisma.supplier.findUnique({
+          where: { id: Number(data.supplierId) },
+        });
+        if (!validatedSupplier) {
+          throw new NotFoundError('Supplier');
+        }
+
+        if (data.newSupplier) {
+          await prisma.supplier.update({
+            where: { id: Number(data.supplierId) },
+            data: {
+              supplierName: data.newSupplier.name || validatedSupplier.supplierName,
+              phone: data.newSupplier.phone || validatedSupplier.phone,
+              email: data.newSupplier.email || validatedSupplier.email,
+              address: data.newSupplier.address || validatedSupplier.address,
+              taxCode: data.newSupplier.taxCode || validatedSupplier.taxCode,
+            }
+          });
+        }
+        supplierId = Number(data.supplierId);
+      } else if (data.newSupplier) {
+        const newSup = await prisma.supplier.create({
+          data: {
+            supplierName: data.newSupplier.name || 'Nhà cung cấp mới',
+            supplierCode: `NCC-${Date.now()}`,
+            supplierType: 'local',
+            phone: data.newSupplier.phone || '',
+            email: data.newSupplier.email || null,
+            address: data.newSupplier.address || null,
+            taxCode: data.newSupplier.taxCode || null,
+            status: 'active',
+            createdBy: userId,
+          }
+        });
+        supplierId = newSup.id;
       }
     }
 
@@ -350,7 +431,7 @@ class PurchaseOrderService {
       return await tx.purchaseOrder.update({
         where: { id },
         data: {
-          ...(data.supplierId && { supplierId: data.supplierId }),
+          supplierId,
           ...(data.warehouseId && { warehouseId: data.warehouseId }),
           ...(data.orderDate && { orderDate: new Date(data.orderDate) }),
           ...(data.expectedDeliveryDate !== undefined && {

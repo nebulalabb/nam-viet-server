@@ -77,6 +77,19 @@ export const updateInvoiceSchema = z.object({
   deliveryAddress: z.string().max(255).optional(),
   discountAmount: z.number().min(0).optional(),
   shippingFee: z.number().min(0).optional(),
+  customerId: z.union([
+    z.number().int().positive(),
+    z.string().transform((val) => Number(val)).refine((val) => val > 0, 'ID khách hàng phải là số dương')
+  ]).optional().nullable(),
+  newCustomer: z.object({
+    customerName: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    address: z.string().optional(),
+    cccd: z.string().optional(),
+    issuedAt: z.string().optional().nullable(),
+    issuedBy: z.string().optional().nullable(),
+  }).optional().nullable(),
   notes: z.string().max(255).optional(),
 });
 

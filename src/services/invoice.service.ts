@@ -26,6 +26,7 @@ class InvoiceService {
           gte: new Date(date.setHours(0, 0, 0, 0)),
           lt: new Date(date.setHours(23, 59, 59, 999)),
         },
+        deletedAt: null,
       },
     });
 
@@ -72,6 +73,7 @@ class InvoiceService {
     };
 
     const where = {
+      deletedAt: null,
       ...(customerId && { customerId: Number(customerId) }),
       ...(warehouseId && { warehouseId: Number(warehouseId) }),
       ...(createdBy && { createdBy: Number(createdBy) }),
@@ -167,7 +169,11 @@ class InvoiceService {
   // Get invoice detail - only if created by this user
   async getByIdForUser(id: number, userId: number) {
     const order = await prisma.invoice.findFirst({
-      where: { id, createdBy: userId },
+      where: {
+        id,
+        createdBy: userId,
+        deletedAt: null,
+      },
       include: {
         customer: {
           select: {
@@ -209,8 +215,8 @@ class InvoiceService {
 
   async getById(id: number) {
     const [order, warehouseReceipts] = await Promise.all([
-      prisma.invoice.findUnique({
-        where: { id },
+      prisma.invoice.findFirst({
+        where: { id, deletedAt: null },
         include: {
           customer: {
             select: {
@@ -752,9 +758,58 @@ class InvoiceService {
       throw new ValidationError('Chỉ có thể cập nhật đơn hàng ở trạng thái chờ xử lý');
     }
 
+    let customerId = data.customerId || order.customerId;
+    let validatedCustomer: any = null;
+
+    // Handle Customer logic (similar to create)
+    if (data.customerId || data.newCustomer) {
+      if (data.customerId) {
+        validatedCustomer = await customerService.getById(Number(data.customerId));
+        if (validatedCustomer.status !== 'active') {
+          throw new ValidationError('Khách hàng phải ở trạng thái hoạt động để gán vào đơn hàng');
+        }
+
+        // If newCustomer data is provided while customerId exists, update the customer
+        if (data.newCustomer) {
+          await prisma.customer.update({
+            where: { id: Number(data.customerId) },
+            data: {
+              customerName: data.newCustomer.customerName || validatedCustomer.customerName,
+              phone: data.newCustomer.phone || validatedCustomer.phone,
+              email: data.newCustomer.email || validatedCustomer.email,
+              address: data.newCustomer.address || validatedCustomer.address,
+              cccd: data.newCustomer.cccd || validatedCustomer.cccd,
+              issuedAt: data.newCustomer.issuedAt ? new Date(data.newCustomer.issuedAt) : validatedCustomer.issuedAt,
+              issuedBy: data.newCustomer.issuedBy || validatedCustomer.issuedBy,
+            }
+          });
+        }
+        customerId = Number(data.customerId);
+      } else if (data.newCustomer) {
+        // Create new customer
+        const newCust = await prisma.customer.create({
+          data: {
+            customerName: data.newCustomer.customerName || 'Khách hàng mới',
+            customerCode: `KH-${Date.now()}`,
+            customerType: 'individual',
+            phone: data.newCustomer.phone || '',
+            email: data.newCustomer.email || null,
+            address: data.newCustomer.address || null,
+            cccd: data.newCustomer.cccd || null,
+            issuedAt: data.newCustomer.issuedAt ? new Date(data.newCustomer.issuedAt) : null,
+            issuedBy: data.newCustomer.issuedBy || null,
+            status: 'active',
+            createdBy: userId,
+          }
+        });
+        customerId = newCust.id;
+      }
+    }
+
     const updatedOrder = await prisma.invoice.update({
       where: { id },
       data: {
+        customerId,
         ...(data.orderDate && { orderDate: new Date(data.orderDate) }),
         ...(data.salesChannel && { salesChannel: data.salesChannel }),
         ...(data.deliveryAddress !== undefined && { deliveryAddress: data.deliveryAddress }),
@@ -1143,8 +1198,8 @@ class InvoiceService {
   }
 
   async delete(id: number, userId: number) {
-    const order = await prisma.invoice.findUnique({
-      where: { id },
+    const order = await prisma.invoice.findFirst({
+      where: { id, deletedAt: null },
       include: {
         details: true,
       },
@@ -1159,8 +1214,11 @@ class InvoiceService {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.invoice.delete({
+      await tx.invoice.update({
         where: { id },
+        data: {
+          deletedAt: new Date(),
+        },
       });
     });
 
@@ -1173,8 +1231,8 @@ class InvoiceService {
   }
 
   async revert(id: number, userId: number) {
-    const order = await prisma.invoice.findUnique({
-      where: { id },
+    const order = await prisma.invoice.findFirst({
+      where: { id, deletedAt: null },
       include: {
         paymentReceipts: {
           where: { deletedAt: null }
@@ -1240,8 +1298,8 @@ class InvoiceService {
   }
 
   async checkAndCompleteOrder(invoiceId: number, userId: number, tx: Prisma.TransactionClient) {
-    const order = await tx.invoice.findUnique({
-      where: { id: invoiceId },
+    const order = await tx.invoice.findFirst({
+      where: { id: invoiceId, deletedAt: null },
       include: {
         details: true,
         deliveries: {
