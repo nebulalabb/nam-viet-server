@@ -146,6 +146,20 @@ class InvoiceController {
     });
   }
 
+  // POST /api/invoices/:id/revert - Revert order to pending
+  async revert(req: AuthRequest, res: Response) {
+    const id = parseInt(req.params.id);
+    const userId = req.user!.id;
+    const order = await invoiceService.revert(id, userId);
+
+    res.status(200).json({
+      success: true,
+      data: order,
+      message: 'Chuyển trạng thái đơn hàng về chờ xác nhận thành công',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
 }
 
 export default new InvoiceController();

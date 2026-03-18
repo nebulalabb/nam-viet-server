@@ -102,6 +102,13 @@ router.post(
   asyncHandler(invoiceController.processPayment.bind(invoiceController))
 );
 
+// POST /api/invoices/:id/revert - Revert order to pending
+router.post(
+  '/:id/revert',
+  authorize('APPROVE_INVOICE'), // Require approval permission to revert
+  asyncHandler(invoiceController.revert.bind(invoiceController))
+);
+
 // DELETE /api/invoices/:id - Delete order
 router.delete(
   '/:id',

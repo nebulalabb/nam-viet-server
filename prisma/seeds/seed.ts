@@ -8,6 +8,7 @@ import { seedTaxes } from './tax.seed';
 import { seedAttributes } from './attribute.seed';
 import { seedProducts } from './product.seed';
 import { seedInventory } from './inventory.seed';
+import { seedCustomers } from './customer.seed';
 
 const prisma = new PrismaClient();
 
@@ -677,7 +678,12 @@ async function main() {
   await seedProducts(prisma, adminUser.id);
 
   // =====================================================
-  // 13. SEED INVENTORY
+  // 13. SEED CUSTOMERS
+  // =====================================================
+  await seedCustomers(prisma, adminUser.id);
+
+  // =====================================================
+  // 14. SEED INVENTORY
   // =====================================================
   await seedInventory(prisma, adminUser.id);
 

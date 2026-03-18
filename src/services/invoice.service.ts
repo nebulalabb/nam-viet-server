@@ -123,6 +123,18 @@ class InvoiceService {
               details: true,
             },
           },
+          details: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  code: true,
+                  productName: true,
+                  unit: true,
+                },
+              },
+            },
+          },
         },
         skip: offset,
         take: limitNum,
@@ -1142,8 +1154,8 @@ class InvoiceService {
       throw new NotFoundError('Không tìm thấy đơn hàng bán');
     }
 
-    if (order.orderStatus !== 'pending') {
-      throw new ValidationError('Chỉ có thể xóa đơn hàng ở trạng thái chờ xử lý');
+    if (order.orderStatus !== 'pending' && order.orderStatus !== 'cancelled') {
+      throw new ValidationError('Chỉ có thể xóa đơn hàng ở trạng thái chờ xử lý hoặc đã hủy');
     }
 
     await prisma.$transaction(async (tx) => {
@@ -1158,6 +1170,73 @@ class InvoiceService {
     });
 
     return { message: 'Xóa đơn hàng bán thành công' };
+  }
+
+  async revert(id: number, userId: number) {
+    const order = await prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        paymentReceipts: {
+          where: { deletedAt: null }
+        },
+        deliveries: {
+          where: { deletedAt: null }
+        }
+      }
+    });
+
+    if (!order) {
+      throw new NotFoundError('Không tìm thấy đơn hàng bán');
+    }
+
+    // Only allow reverting from non-final statuses back to pending
+    if (order.orderStatus === 'completed' || order.orderStatus === 'cancelled') {
+      throw new ValidationError(`Không thể chuyển trạng thái đơn hàng từ "${order.orderStatus}" về "chờ xác nhận"`);
+    }
+
+    // Check for existing payments
+    if (order.paymentReceipts.length > 0) {
+      throw new ValidationError('Không thể chuyển về "chờ xác nhận" vì đơn hàng đã có phiếu thu. Vui lòng xóa phiếu thu trước.');
+    }
+
+    // Check for existing deliveries
+    if (order.deliveries.length > 0) {
+      throw new ValidationError('Không thể chuyển về "chờ xác nhận" vì đơn hàng đã có phiếu giao hàng. Vui lòng xóa phiếu giao hàng trước.');
+    }
+
+    // Check for existing stock transactions (exports)
+    const stockTransactions = await prisma.stockTransaction.count({
+      where: {
+        referenceType: 'invoice',
+        referenceId: id,
+        deletedAt: null
+      }
+    });
+
+    if (stockTransactions > 0) {
+      throw new ValidationError('Không thể chuyển về "chờ xác nhận" vì đơn hàng đã có phiếu xuất kho. Vui lòng xóa phiếu xuất kho trước.');
+    }
+
+    const updatedOrder = await prisma.invoice.update({
+      where: { id },
+      data: {
+        orderStatus: 'pending',
+        approvedBy: null,
+        approvedAt: null,
+      },
+      include: {
+        customer: true,
+        creator: true,
+      },
+    });
+
+    logActivity('update', userId, 'invoices', {
+      recordId: id,
+      action: 'revert_to_pending',
+      orderCode: order.orderCode,
+    });
+
+    return updatedOrder;
   }
 
   async checkAndCompleteOrder(invoiceId: number, userId: number, tx: Prisma.TransactionClient) {
