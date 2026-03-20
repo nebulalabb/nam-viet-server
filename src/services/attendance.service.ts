@@ -200,8 +200,8 @@ class AttendanceService {
 
   // Check-in
   async checkIn(userId: number, data: CheckInInput) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const localNow = new Date();
+    const today = new Date(Date.UTC(localNow.getFullYear(), localNow.getMonth(), localNow.getDate()));
 
     // Check if already checked in today
     const existing = await prisma.attendance.findUnique({
@@ -264,8 +264,8 @@ class AttendanceService {
 
   // Check-out
   async checkOut(userId: number, data: CheckOutInput) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const localNow = new Date();
+    const today = new Date(Date.UTC(localNow.getFullYear(), localNow.getMonth(), localNow.getDate()));
 
     const existing = await prisma.attendance.findUnique({
       where: {
