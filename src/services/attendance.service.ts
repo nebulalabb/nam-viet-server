@@ -778,6 +778,28 @@ class AttendanceService {
     return lockedMonth;
   }
 
+  // Unlock attendance month
+  async unlockMonth(month: string) {
+    const existingLock = await prisma.attendanceMonth.findUnique({
+      where: { month },
+    });
+
+    if (!existingLock?.isLocked) {
+      throw new ConflictError('Tháng này chưa bị khóa công');
+    }
+
+    const unlockedMonth = await prisma.attendanceMonth.update({
+      where: { month },
+      data: {
+        isLocked: false,
+        lockedBy: null,
+        lockedAt: null,
+      },
+    });
+
+    return unlockedMonth;
+  }
+
   // Check if month is locked
   async isMonthLocked(month: string): Promise<boolean> {
     const lock = await prisma.attendanceMonth.findUnique({

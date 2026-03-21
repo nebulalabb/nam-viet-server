@@ -293,7 +293,18 @@ class QRCodeService {
     const [records, total] = await Promise.all([
       prisma.attendanceQRCode.findMany({
         where: { deletedAt: null },
-        include: {
+        select: {
+          id: true,
+          sessionToken: true,
+          startDate: true,
+          endDate: true,
+          shift: true,
+          type: true,
+          isActive: true,
+          usageCount: true,
+          createdBy: true,
+          createdAt: true,
+          expiresAt: true,
           creator: {
             select: {
               id: true,
