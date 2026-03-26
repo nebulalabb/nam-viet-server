@@ -70,6 +70,13 @@ class CustomerService {
               employeeCode: true,
             },
           },
+          assignedUser: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeCode: true,
+            },
+          },
           _count: {
             select: {
               invoices: true,
@@ -153,6 +160,15 @@ class CustomerService {
             fullName: true,
             employeeCode: true,
             email: true,
+          },
+        },
+        assignedUser: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeCode: true,
+            email: true,
+            phone: true,
           },
         },
         invoices: {
@@ -255,6 +271,7 @@ class CustomerService {
         rewardCode: data.rewardCode || null,
         notes: data.notes,
         status: data.status || 'active',
+        assignedUserId: data.assignedUserId || null,
         createdBy: userId,
       },
       include: {
@@ -343,6 +360,7 @@ class CustomerService {
         ...(data.rewardPoints !== undefined && { rewardPoints: data.rewardPoints }),
         ...(data.rewardCode !== undefined && { rewardCode: data.rewardCode || null }),
         ...(data.status !== undefined && { status: data.status }),
+        ...(data.assignedUserId !== undefined && { assignedUserId: data.assignedUserId }),
         updatedBy: userId,
       },
       include: {

@@ -534,40 +534,35 @@ class SmartDebtService {
           // Chỉ lấy những trả hàng thuộc về đúng nhà cung cấp đang xem
           const allowedPos = await prisma.purchaseOrder.findMany({
             where: { id: { in: poIdsFromReturns }, supplierId: Number(id), status: { not: 'cancelled' } },
-            select: { id: true, taxRate: true }
+            select: { id: true }
           })
           const allowedSet = new Set(allowedPos.map(p => p.id))
           const allowedPoIds = Array.from(allowedSet)
 
           if (allowedPoIds.length > 0) {
-            const taxRateMap = new Map<number, number>();
-            for (const po of allowedPos) {
-              taxRateMap.set(po.id, this._toNumber(po.taxRate));
-            }
-
             const poDetails = await prisma.purchaseOrderDetail.findMany({
               where: { poId: { in: allowedPoIds } },
-              select: { poId: true, productId: true, unitPrice: true }
+              select: { poId: true, productId: true, quantity: true, total: true }
             });
 
-            const unitPriceMap = new Map<string, number>();
+            const unitValueMap = new Map<string, number>();
             for (const d of poDetails) {
-              unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.unitPrice));
+              const qty = this._toNumber(d.quantity);
+              if (!qty) continue;
+              const total = this._toNumber(d.total);
+              unitValueMap.set(`${d.poId}:${d.productId}`, total / qty);
             }
 
             const filteredReturns = stockReturns.filter(r => r.referenceId && allowedSet.has(r.referenceId))
 
             returns = filteredReturns.map(r => {
               const poId = r.referenceId as number;
-              let subTotalReturned = 0;
+              let amount = 0;
 
               for (const det of r.details || []) {
-                const unit = unitPriceMap.get(`${poId}:${det.productId}`) || 0;
-                subTotalReturned += this._toNumber(det.quantity) * unit;
+                const unit = unitValueMap.get(`${poId}:${det.productId}`) || 0;
+                amount += this._toNumber(det.quantity) * unit;
               }
-
-              const taxRate = taxRateMap.get(poId) ?? 0;
-              const amount = subTotalReturned * (1 + taxRate / 100);
 
               return {
                 id: r.id,
