@@ -164,10 +164,12 @@ class UserService {
 
   // Create new user
   async createUser(data: CreateUserInput, createdBy: number) {
-    const emailExists = await this.checkEmailExists(data.email);
+    if (data.email && data.email.trim() !== '') {
+      const emailExists = await this.checkEmailExists(data.email);
 
-    if (emailExists) {
-      throw new ConflictError('Email đã tồn tại');
+      if (emailExists) {
+        throw new ConflictError('Email đã tồn tại');
+      }
     }
 
     const employeeCodeExists = await this.checkEmployeeCodeExists(data.employeeCode);
@@ -193,13 +195,13 @@ class UserService {
       }
     }
 
-    const passwordHash = await hashPassword(data.password);
+    const passwordHash = data.password && data.password.trim() !== '' ? await hashPassword(data.password) : null;
 
     const user = await prisma.user.create({
       data: {
         employeeCode: data.employeeCode,
-        email: data.email,
-        passwordHash,
+        email: (data.email && data.email.trim() !== '' ? data.email : null) as any,
+        passwordHash: passwordHash as any,
         fullName: data.fullName,
         phone: data.phone || null,
         address: data.address || null,
@@ -272,7 +274,7 @@ class UserService {
     }
 
     // Check email uniqueness (if changing)
-    if (data.email && data.email !== existingUser.email) {
+    if (data.email && data.email.trim() !== '' && data.email !== existingUser.email) {
       const emailExists = await this.checkEmailExists(data.email, id);
       if (emailExists) {
         throw new ConflictError('Email đã tồn tại');
@@ -312,7 +314,7 @@ class UserService {
       where: { id },
       data: {
         ...(data.employeeCode && { employeeCode: data.employeeCode }),
-        ...(data.email && { email: data.email }),
+        ...(data.email && data.email.trim() !== '' ? { email: data.email } : { email: null as any }),
         ...(data.fullName && { fullName: data.fullName }),
         ...(data.phone !== undefined && { phone: data.phone }),
         ...(data.address !== undefined && { address: data.address }),

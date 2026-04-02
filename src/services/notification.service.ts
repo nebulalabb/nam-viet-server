@@ -107,13 +107,15 @@ class NotificationService {
       });
 
       await Promise.all(
-        users.map((user) =>
-          emailService.sendNotificationEmail(user.email, {
-            name: user.fullName,
-            title: data.title,
-            message: data.message,
-          })
-        )
+        users
+          .filter((user) => user.email)
+          .map((user) =>
+            emailService.sendNotificationEmail(user.email as string, {
+              name: user.fullName,
+              title: data.title,
+              message: data.message,
+            })
+          )
       );
     }
 

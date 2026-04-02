@@ -65,6 +65,10 @@ class AuthService {
       );
     }
 
+    if (!user.passwordHash || !user.email) {
+      throw new AuthenticationError('Tài khoản chưa được cấp quyền đăng nhập');
+    }
+
     const isPasswordValid = await comparePassword(password, user.passwordHash);
     if (!isPasswordValid) {
       this.incrementLoginAttempts(email);
@@ -78,7 +82,7 @@ class AuthService {
 
     // Send OTP via email
     const emailSent = await emailService.sendEmail({
-      to: user.email,
+      to: user.email!,
       subject: 'Mã xác thực đăng nhập - Công Ty Nam Việt',
       html: this.getOTPEmailTemplate(user.fullName, code),
       text: `Xin chào ${user.fullName},\n\nMã xác thực đăng nhập của bạn là: ${code}\n\nMã này sẽ hết hạn sau 5 phút.\n\nTrân trọng,\nCông Ty Nam Việt`,
@@ -123,6 +127,10 @@ class AuthService {
       throw new NotFoundError('Người dùng không tồn tại');
     }
 
+    if (!user.passwordHash || !user.email) {
+      throw new AuthenticationError('Tài khoản chưa được cấp quyền đăng nhập');
+    }
+
     const isOldPasswordValid = await comparePassword(oldPassword, user.passwordHash);
     if (!isOldPasswordValid) {
       throw new ValidationError('Mật khẩu hiện tại không đúng');
@@ -146,7 +154,9 @@ class AuthService {
     });
 
     // Send notification email
-    await emailService.sendPasswordChangedEmail(user.email, user.fullName);
+    if (user.email) {
+      await emailService.sendPasswordChangedEmail(user.email, user.fullName);
+    }
 
     return { message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại' };
   }
@@ -177,12 +187,12 @@ class AuthService {
 
     const resetToken = this.generateResetToken();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    
+
 
     await prisma.verificationCode.create({
       data: {
         userId: user.id,
-        email: user.email,
+        email: user.email!,
         code: resetToken,
         type: 'forgot_password' as any,
         expiresAt,
@@ -191,7 +201,7 @@ class AuthService {
 
     // Send email with reset link
     const emailSent = await emailService.sendPasswordResetEmail(
-      user.email,
+      user.email!,
       user.fullName,
       resetToken
     );
@@ -491,7 +501,7 @@ class AuthService {
     // Generate tokens
     const payload: JwtPayload = {
       id: user.id,
-      email: user.email,
+      email: user.email!,
       roleId: user.roleId,
       warehouseId: user.warehouseId || undefined,
       employeeCode: user.employeeCode,
@@ -541,11 +551,13 @@ class AuthService {
       throw new AuthenticationError('Yêu cầu không hợp lệ');
     }
 
-    const { code, expiresIn } = await this.createOTPCode(user.id, user.email, ipAddress);
+    if (!user.email) throw new AuthenticationError('Tài khoản chưa có email');
+
+    const { code, expiresIn } = await this.createOTPCode(user.id, user.email!, ipAddress);
 
     // Send OTP via email
     await emailService.sendEmail({
-      to: user.email,
+      to: user.email!,
       subject: 'Mã xác thực đăng nhập - Công Ty Nam Việt',
       html: this.getOTPEmailTemplate(user.fullName, code),
       text: `Xin chào ${user.fullName},\n\nMã xác thực đăng nhập của bạn là: ${code}\n\nMã này sẽ hết hạn sau 5 phút.\n\nTrân trọng,\nCông Ty Nam Việt`,

@@ -398,6 +398,52 @@ class SmartDebtController {
     }
   }
 
+  // =========================================================================
+  // 5. NHÓM DANH SÁCH ĐEN & GIA HẠN CÔNG NỢ
+  // =========================================================================
+
+  /**
+   * POST /api/smart-debt/:id/blacklist
+   * Body: { type: 'customer' }
+   */
+  async toggleBlacklist(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { type } = req.body;
+      if (type !== 'customer') throw new ValidationError("Tính năng danh sách đen hiện chỉ hỗ trợ Khách hàng");
+
+      const data = await debtService.toggleBlacklist(Number(id));
+      res.status(200).json({
+        success: true,
+        message: data.isBlacklisted ? "Đã đưa khách hàng vào Danh Sách Đen" : "Đã đưa khách hàng ra khỏi Danh Sách Đen",
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/smart-debt/:id/extend-debt
+   * Body: { type: 'customer' }
+   */
+  async extendDebt(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { type } = req.body;
+      if (type !== 'customer') throw new ValidationError("Tính năng gia hạn hiện chỉ hỗ trợ Khách hàng");
+
+      const data = await debtService.extendDebt(Number(id));
+      res.status(200).json({
+        success: true,
+        message: "Đã gia hạn kiểm tra nợ thêm 1 năm cho khách hàng này",
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }
 
 export default new SmartDebtController();

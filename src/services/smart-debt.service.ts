@@ -14,6 +14,7 @@ export interface DebtQueryParams {
   assignedUserId?: number; // Lọc theo nhân viên phụ trách
   type?: 'customer' | 'supplier';
   address?: string;        // Lọc theo địa chỉ
+  blacklist?: string;      // 'true' hoặc 'false'
 }
 
 // ==========================================
@@ -62,7 +63,7 @@ class SmartDebtService {
   // =========================================================================
   async getAll(params: DebtQueryParams) {
 
-    const { page = 1, limit = 20, search, status, year, assignedUserId, type, address } = params;
+    const { page = 1, limit = 20, search, status, year, assignedUserId, type, address, blacklist } = params;
     const skip = (Number(page) - 1) * Number(limit);
     const targetYearStr = year ? String(year) : String(new Date().getFullYear());
 
@@ -76,6 +77,11 @@ class SmartDebtService {
     // --- 1. LỌC THEO KHÁCH HÀNG (Query bảng Customer) ---
     if (type === 'customer') {
       const where: any = { status: 'active' };
+      if (blacklist === 'true') {
+        where.isBlacklisted = true;
+      } else {
+        where.isBlacklisted = false;
+      }
 
       if (search) {
         where.OR = [
@@ -104,7 +110,8 @@ class SmartDebtService {
           where, skip, take: Number(limit),
           include: {
             assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 }
+            debtPeriods: { where: { periodName: targetYearStr }, take: 1 },
+            paymentReceipts: { orderBy: { receiptDate: 'desc' }, take: 1 } as any
           },
           orderBy: { createdBy: 'desc' }
         }),
@@ -166,7 +173,7 @@ class SmartDebtService {
     // --- 3. TẤT CẢ (Gộp cả Khách hàng và NCC) ---
     else {
       // 1. Tạo điều kiện lọc cho Khách hàng
-      const customerWhere: any = { status: 'active' };
+      const customerWhere: any = { status: 'active', isBlacklisted: false };
       if (search) {
         customerWhere.OR = [
           { customerName: { contains: search } },
@@ -193,7 +200,8 @@ class SmartDebtService {
           where: customerWhere,
           include: {
             assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 }
+            debtPeriods: { where: { periodName: targetYearStr }, take: 1 },
+            paymentReceipts: { orderBy: { receiptDate: 'desc' }, take: 1 } as any
           }
         }),
         prisma.supplier.findMany({
@@ -220,11 +228,12 @@ class SmartDebtService {
         filteredData = allData.filter(item => item && item.closingBalance <= 1000);
       }
 
-      // 6. Sắp xếp
+      // 6. Sắp xếp (Ưu tiên những ai bị cảnh báo isWarning lên đầu)
       total = filteredData.length;
       data = filteredData
         .sort((a, b) => {
-          // Đảm bảo a và b tồn tại, nếu không coi như bằng 0
+          if (a?.isWarning && !b?.isWarning) return -1;
+          if (!a?.isWarning && b?.isWarning) return 1;
           const valA = a?.closingBalance ?? 0;
           const valB = b?.closingBalance ?? 0;
           return valB - valA;
@@ -232,7 +241,7 @@ class SmartDebtService {
         .slice(skip, skip + Number(limit));
     }
 
-    const globalSummary = await this.getGlobalSummary(targetYearStr, type, assignedUserId);
+    const globalSummary = await this.getGlobalSummary(targetYearStr, type, assignedUserId, blacklist);
 
     const result = {
       data, // Biến data lấy từ logic query List (bước trước)
@@ -251,15 +260,28 @@ class SmartDebtService {
   // =========================================================================
   // 🛠️ HELPER: TÍNH TỔNG TOÀN CỤC (CỐ ĐỊNH THEO NĂM & LOẠI)
   // =========================================================================
-  async getGlobalSummary(year: string, type?: string, assignedUserId?: number) {
+  async getGlobalSummary(year: string, type?: string, assignedUserId?: number, blacklist?: string) {
     // Điều kiện lọc CỐ ĐỊNH: Chỉ theo Năm và Loại (Khách/NCC)
     // ⚠️ TUYỆT ĐỐI KHÔNG đưa Search Text hay Tỉnh Thành vào đây
     const where: any = { periodName: year };
 
     if (type === 'customer') {
       where.customerId = { not: null };
+      where.customer = { isBlacklisted: blacklist === 'true' };
     } else if (type === 'supplier') {
       where.supplierId = { not: null };
+    } else {
+      // type === all
+      if (blacklist === 'true') {
+         where.customer = { isBlacklisted: true };
+      } else {
+         // We must somehow exclude blacklisted customers if we query all.
+         // Prisma supports OR, so:
+         where.OR = [
+           { supplierId: { not: null } },
+           { customer: { isBlacklisted: false } }
+         ];
+      }
     }
 
     // Nếu lọc theo User phụ trách thì Summary cũng nên theo User đó (Logic Dashboard cá nhân)
@@ -298,6 +320,27 @@ class SmartDebtService {
   // ---------------------------------------------------------------------------
   private _mapToDebtItem(obj: any, debt: any, type: 'customer' | 'supplier', year: string) {
     if (!obj) return null;
+
+    let isWarning = false;
+    let closingBalance = Number(debt?.closingBalance || 0);
+
+    if (type === 'customer' && closingBalance > 0) {
+       const oneYearAgo = new Date();
+       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+       
+       let lastPaymentDate: Date | null = null;
+       if (obj.paymentReceipts && obj.paymentReceipts.length > 0) {
+          lastPaymentDate = new Date(obj.paymentReceipts[0].receiptDate);
+       }
+
+       const noPaymentInOneYear = !lastPaymentDate || lastPaymentDate < oneYearAgo;
+
+       const debtExtensionDate = obj.debtExtensionDate ? new Date(obj.debtExtensionDate) : null;
+       const noActiveExtension = !debtExtensionDate || debtExtensionDate < new Date();
+
+       isWarning = noPaymentInOneYear && noActiveExtension;
+    }
+
     return {
       id: debt?.id || 0, // Nếu chưa có DebtPeriod, ID = 0
       type,
@@ -320,7 +363,10 @@ class SmartDebtService {
 
       status: Number(debt?.closingBalance || 0) > 1000 ? 'unpaid' : 'paid',
       updatedAt: debt?.updatedAt || new Date().toISOString(),
-      notes: debt?.notes || ''
+      notes: debt?.notes || '',
+      isWarning,
+      isBlacklisted: obj.isBlacklisted || false,
+      debtExtensionDate: obj.debtExtensionDate || null
     };
   }
 
@@ -2681,6 +2727,44 @@ class SmartDebtService {
     return { months, summary };
   }
 
+  // =================================================================
+  // 12. DANH SÁCH ĐEN & GIA HẠN CÔNG NỢ
+  // =================================================================
+
+  async toggleBlacklist(customerId: number) {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) throw new NotFoundError('Không tìm thấy khách hàng này');
+
+    const updated = await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        isBlacklisted: !(customer as any).isBlacklisted
+      } as any
+    });
+
+    return updated;
+  }
+
+  async extendDebt(customerId: number) {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) throw new NotFoundError('Không tìm thấy khách hàng này');
+
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+    const updated = await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        debtExtensionDate: nextYear
+      } as any
+    });
+
+    return updated;
+  }
 }
 
 export default new SmartDebtService();

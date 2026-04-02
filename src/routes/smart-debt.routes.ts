@@ -115,4 +115,20 @@ router.post(
 //   asyncHandler(smartDebtController.sendEmail.bind(smartDebtController))
 // );
 
+// =============================================================================
+// 4. NHÓM DANH SÁCH ĐEN & GIA HẠN
+// =============================================================================
+
+router.post(
+  '/:id/blacklist',
+  authorize('UPDATE_DEBT_RECONCILIATION'),
+  asyncHandler(smartDebtController.toggleBlacklist.bind(smartDebtController))
+);
+
+router.post(
+  '/:id/extend-debt',
+  authorize('UPDATE_DEBT_RECONCILIATION'),
+  asyncHandler(smartDebtController.extendDebt.bind(smartDebtController))
+);
+
 export default router;

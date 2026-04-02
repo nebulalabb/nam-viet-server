@@ -21,6 +21,7 @@ async function main() {
     // Debt / Công nợ
     { key: "VIEW_DEBT_RECONCILIATION", name: "Xem công nợ", module: "debt", moduleLabel: "Công nợ" },
     { key: "CREATE_DEBT_RECONCILIATION", name: "Tạo/Đồng bộ công nợ", module: "debt", moduleLabel: "Công nợ" },
+    { key: "UPDATE_DEBT_RECONCILIATION", name: "Cập nhật/Danh sách đen công nợ", module: "debt", moduleLabel: "Công nợ" },
   ];
 
   // Create permissions
