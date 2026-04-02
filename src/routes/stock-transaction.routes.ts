@@ -67,6 +67,15 @@ router.post(
   asyncHandler(stockTransactionController.createStocktake.bind(stockTransactionController))
 );
 
+// PUT /api/stock-transactions/:id - Update transaction
+router.put(
+  '/:id',
+  authorizeAny('WAREHOUSE_IMPORT_UPDATE', 'WAREHOUSE_EXPORT_UPDATE', 'MANAGE_INVENTORY'),
+  validate(transactionIdSchema, 'params'),
+  logActivityMiddleware('update', 'stock_transaction'),
+  asyncHandler(stockTransactionController.update.bind(stockTransactionController))
+);
+
 // PUT /api/stock-transactions/:id/post - Post transaction
 router.put(
   '/:id/post',

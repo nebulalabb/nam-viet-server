@@ -223,6 +223,13 @@ class PaymentReceiptService {
             paidAmount: true,
             orderStatus: true,
             paymentStatus: true,
+            details: {
+              include: {
+                product: {
+                  include: { unit: true }
+                }
+              }
+            }
           },
         },
         creator: {
@@ -231,6 +238,7 @@ class PaymentReceiptService {
             fullName: true,
             employeeCode: true,
             email: true,
+            phone: true,
           },
         },
       },
@@ -240,7 +248,36 @@ class PaymentReceiptService {
       throw new NotFoundError('Không tìm thấy phiếu thu');
     }
 
-    return receipt;
+    const result: any = { ...receipt };
+    if (receipt.customerRef) {
+      result.receiver = {
+        id: receipt.customerRef.id,
+        name: receipt.customerRef.customerName,
+        code: receipt.customerRef.customerCode,
+        phone: receipt.customerRef.phone,
+        email: receipt.customerRef.email,
+        address: receipt.customerRef.address,
+        identityCard: receipt.customerRef.cccd,
+      };
+    }
+    if (receipt.customer) {
+      result.invoice = {
+        ...receipt.customer,
+        code: receipt.customer.orderCode,
+        items: (receipt.customer as any).details?.map((d: any) => ({
+          ...d,
+          productName: d.product?.productName,
+          productCode: d.product?.code,
+          unitName: d.product?.unit?.name || 'Không có',
+          image: d.product?.image,
+        })) || []
+      };
+    }
+    if (receipt.creator) {
+      result.createdByUser = receipt.creator;
+    }
+
+    return result;
   }
 
   async create(data: CreatePaymentReceiptInput, userId: number) {

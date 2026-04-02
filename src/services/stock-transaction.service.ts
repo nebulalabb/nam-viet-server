@@ -204,7 +204,27 @@ class StockTransactionService {
       throw new NotFoundError('Stock transaction');
     }
 
-    return transaction;
+    // Attach external relations manually if needed
+    const result: any = { ...transaction };
+    if (transaction.customerId && !result.customer) {
+      result.customer = await prisma.customer.findUnique({ where: { id: transaction.customerId } });
+    }
+    if (transaction.supplierId && !result.supplier) {
+      result.supplier = await prisma.supplier.findUnique({ where: { id: transaction.supplierId } });
+    }
+    if (transaction.referenceType === 'invoice' && transaction.referenceId && !result.invoice) {
+      result.invoice = await prisma.invoice.findUnique({ 
+        where: { id: transaction.referenceId },
+        include: { customer: true }
+      });
+      if (result.invoice?.customer && !result.customer) {
+        result.customer = result.invoice.customer;
+      }
+    } else if (transaction.referenceType === 'purchase_order' && transaction.referenceId && !result.purchaseOrder) {
+      result.purchaseOrder = await prisma.purchaseOrder.findUnique({ where: { id: transaction.referenceId } });
+    }
+
+    return result;
   }
 
   async createImport(data: CreateImportInput, userId: number) {
@@ -312,12 +332,31 @@ class StockTransactionService {
       });
     }
 
-    const transactionCode = await this.generateTransactionCode('export');
+    let transactionCode = await this.generateTransactionCode('export');
 
-    const transaction = await prisma.stockTransaction.create({
-      data: {
-        transactionCode,
-        transactionType: 'export',
+    if (data.referenceType === 'invoice' && data.referenceId) {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: data.referenceId },
+        select: { orderCode: true }
+      });
+      if (invoice?.orderCode) {
+        if (invoice.orderCode.startsWith('DB-')) {
+          transactionCode = 'XK-' + invoice.orderCode.substring(3);
+        } else {
+          transactionCode = 'XK-' + invoice.orderCode;
+        }
+      }
+    }
+
+    let transaction;
+    let retries = 3;
+
+    while (retries > 0) {
+      try {
+        transaction = await prisma.stockTransaction.create({
+          data: {
+            transactionCode,
+            transactionType: 'export',
         warehouseId: data.warehouseId,
         referenceType: data.referenceType,
         referenceId: data.referenceId,
@@ -349,6 +388,19 @@ class StockTransactionService {
         creator: true,
       },
     });
+        break;
+      } catch (error: any) {
+        if (error.code === 'P2002' && error.meta?.target === 'stock_transactions_transaction_code_key') {
+          retries--;
+          if (retries === 0) throw error;
+          transactionCode = `${transactionCode}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (!transaction) throw new Error("Failed to create transaction");
 
     logActivity('create', userId, 'stock_transactions', {
       recordId: transaction.id,
@@ -584,6 +636,70 @@ class StockTransactionService {
     });
 
     return transaction;
+  }
+
+  async updateTransaction(id: number, data: { notes?: string; reason?: string; details?: Array<{ id?: number; productId: number; unitId?: number; quantity: number; notes?: string; batchNumber?: string }> }, userId: number) {
+    const transaction = await this.getById(id);
+
+
+    const updateData: any = {};
+    if (data.notes !== undefined) updateData.notes = data.notes;
+    if (data.reason !== undefined) updateData.reason = data.reason;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Update main transaction
+      const updated = await tx.stockTransaction.update({
+        where: { id },
+        data: updateData,
+        include: {
+          details: { include: { product: true } },
+          warehouse: true,
+          creator: true,
+        },
+      });
+
+      // Update details if provided
+      if (data.details && data.details.length > 0) {
+        if (transaction.isPosted) {
+          // Giao dịch đã ghi sổ, chỉ cho phép cập nhật ghi chú của chi tiết sản phẩm
+          for (const item of data.details) {
+            const existingDetail = updated.details.find((d: any) =>
+              (item.id && d.id === item.id) ||
+              (!item.id && d.productId === item.productId && (d.unitId === item.unitId || (!d.unitId && !item.unitId)))
+            );
+            if (existingDetail) {
+              await tx.stockTransactionDetail.update({
+                where: { id: existingDetail.id },
+                data: { notes: item.notes || '' },
+              });
+            }
+          }
+        } else {
+          // Chưa ghi sổ, xóa chi tiết cũ và tạo lại
+          await tx.stockTransactionDetail.deleteMany({ where: { transactionId: id } });
+          await tx.stockTransactionDetail.createMany({
+            data: data.details.map((item) => ({
+              transactionId: id,
+              productId: item.productId,
+              unitId: item.unitId,
+              warehouseId: transaction.warehouseId,
+              quantity: item.quantity,
+              batchNumber: item.batchNumber,
+              notes: item.notes,
+            })),
+          });
+        }
+      }
+
+      return updated;
+    });
+
+    logActivity('update', userId, 'stock_transactions', {
+      recordId: id,
+      newValue: result,
+    });
+
+    return await this.getById(id);
   }
 
   async postTransaction(id: number, userId: number, notes?: string) {
