@@ -164,14 +164,18 @@ class UserService {
 
   // Create new user
   async createUser(data: CreateUserInput, createdBy: number) {
-    const emailExists = await this.checkEmailExists(data.email);
-
-    if (emailExists) {
-      throw new ConflictError('Email đã tồn tại');
+    // Chỉ kiểm tra email unique nếu có email
+    if (data.email) {
+      const emailExists = await this.checkEmailExists(data.email);
+      if (emailExists) {
+        throw new ConflictError('Email đã tồn tại');
+      }
     }
 
-    const employeeCodeExists = await this.checkEmployeeCodeExists(data.employeeCode);
+    // Tự động sinh mã nhân viên nếu không có
+    const employeeCode = data.employeeCode?.trim() || `NV${Date.now().toString().slice(-8)}`;
 
+    const employeeCodeExists = await this.checkEmployeeCodeExists(employeeCode);
     if (employeeCodeExists) {
       throw new ConflictError('Mã nhân viên đã tồn tại');
     }
@@ -193,12 +197,13 @@ class UserService {
       }
     }
 
-    const passwordHash = await hashPassword(data.password);
+    // Chỉ hash password nếu có, nhân viên không có tài khoản để null
+    const passwordHash = data.password ? await hashPassword(data.password) : null;
 
     const user = await prisma.user.create({
       data: {
-        employeeCode: data.employeeCode,
-        email: data.email,
+        employeeCode,
+        email: data.email || null,
         passwordHash,
         fullName: data.fullName,
         phone: data.phone || null,
@@ -312,7 +317,7 @@ class UserService {
       where: { id },
       data: {
         ...(data.employeeCode && { employeeCode: data.employeeCode }),
-        ...(data.email && { email: data.email }),
+        ...(data.email !== undefined && { email: data.email }),
         ...(data.fullName && { fullName: data.fullName }),
         ...(data.phone !== undefined && { phone: data.phone }),
         ...(data.address !== undefined && { address: data.address }),
@@ -324,6 +329,7 @@ class UserService {
           dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
         }),
         ...(data.password && data.password.trim() && { passwordHash: await hashPassword(data.password) }),
+        ...(data.email === null && { passwordHash: null }),
         ...(data.roleId && { roleId: data.roleId }),
         ...(data.warehouseId !== undefined && { warehouseId: data.warehouseId }),
         ...(data.status && { status: data.status }),

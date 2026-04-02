@@ -50,7 +50,7 @@ export const authentication = asyncHandler(
 
     req.user = {
       id: user.id,
-      email: user.email,
+      email: user.email!,
       roleId: user.roleId,
       warehouseId: user.warehouseId || undefined,
       employeeCode: user.employeeCode,
@@ -84,7 +84,7 @@ export const optionalAuth = asyncHandler(
         if (user && user.status === 'active') {
           req.user = {
             id: user.id,
-            email: user.email,
+            email: user.email!,
             roleId: user.roleId,
             warehouseId: user.warehouseId || undefined,
             employeeCode: user.employeeCode,
