@@ -15,6 +15,7 @@ import { seedPurchaseOrders } from './purchase_order.seed';
 import { seedStockTransactions } from './stock.seed';
 import { seedDeliveries } from './delivery.seed';
 import { seedFinancial } from './finance.seed';
+import { seedDebt } from './debt.seed';
 
 const prisma = new PrismaClient();
 
@@ -723,6 +724,11 @@ async function main() {
   // 20. SEED FINANCIAL TRANSACTIONS (Receipts, Vouchers)
   // =====================================================
   await seedFinancial(prisma, adminUser.id);
+
+  // =====================================================
+  // 21. SEED CUSTOMER DEBT DATA
+  // =====================================================
+  await seedDebt(prisma);
 
   console.log('✅ Database seed completed successfully! 🎉\n');
   console.log('📌 Login Credentials:\n');

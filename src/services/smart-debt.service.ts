@@ -79,9 +79,8 @@ class SmartDebtService {
       const where: any = { status: 'active' };
       if (blacklist === 'true') {
         where.isBlacklisted = true;
-      } else {
-        where.isBlacklisted = false;
       }
+
 
       if (search) {
         where.OR = [
@@ -172,8 +171,7 @@ class SmartDebtService {
 
     // --- 3. TẤT CẢ (Gộp cả Khách hàng và NCC) ---
     else {
-      // 1. Tạo điều kiện lọc cho Khách hàng
-      const customerWhere: any = { status: 'active', isBlacklisted: false };
+      const customerWhere: any = { status: 'active' };
       if (search) {
         customerWhere.OR = [
           { customerName: { contains: search } },
@@ -274,13 +272,6 @@ class SmartDebtService {
       // type === all
       if (blacklist === 'true') {
          where.customer = { isBlacklisted: true };
-      } else {
-         // We must somehow exclude blacklisted customers if we query all.
-         // Prisma supports OR, so:
-         where.OR = [
-           { supplierId: { not: null } },
-           { customer: { isBlacklisted: false } }
-         ];
       }
     }
 
@@ -365,8 +356,8 @@ class SmartDebtService {
       updatedAt: debt?.updatedAt || new Date().toISOString(),
       notes: debt?.notes || '',
       isWarning,
-      isBlacklisted: obj.isBlacklisted || false,
-      debtExtensionDate: obj.debtExtensionDate || null
+      isBlacklisted: (obj as any).isBlacklisted === true || (obj as any).is_blacklisted === true,
+      debtExtensionDate: (obj as any).debtExtensionDate || (obj as any).debt_extension_date || null
     };
   }
 
