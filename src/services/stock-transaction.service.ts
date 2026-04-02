@@ -185,6 +185,7 @@ class StockTransactionService {
                 id: true,
                 code: true,
                 productName: true,
+                image: true,
                 unit: true,
               },
             },
@@ -924,6 +925,40 @@ class StockTransactionService {
         // Gọi logic kiểm tra hoàn thành tập trung
         await (invoiceService as any).checkAndCompleteOrder(invoiceId, userId, tx);
       }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ─── Tự động tạo phiếu Chuyển kho nhập khi Xuất kho chuyển đi hoàn thành ─────
+    if (transaction.referenceType === 'transfer_out' && transaction.referenceId) {
+      const destWarehouseId = transaction.referenceId;
+      const transactionCode = await this.generateTransactionCode('import');
+
+      // Add a quick random hash to avoid code collisions when inside transaction
+      const uniqueSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+      
+      await tx.stockTransaction.create({
+        data: {
+          transactionCode: `${transactionCode}-${uniqueSuffix}`,
+          transactionType: 'import',
+          warehouseId: destWarehouseId,
+          referenceType: 'transfer_in',
+          referenceId: transaction.warehouseId, // Source warehouse
+          reason: transaction.reason || `Chuyển kho từ PN ${transaction.transactionCode}`,
+          notes: transaction.notes,
+          isPosted: false,
+          createdBy: userId,
+          details: {
+            create: transaction.details.map((item: any) => ({
+              productId: item.productId,
+              unitId: item.unitId,
+              warehouseId: destWarehouseId,
+              quantity: item.quantity,
+              batchNumber: item.batchNumber,
+              notes: item.notes,
+            })),
+          },
+        },
+      });
     }
     // ─────────────────────────────────────────────────────────────────────────
   }
