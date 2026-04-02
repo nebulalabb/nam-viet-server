@@ -124,6 +124,24 @@ class StockTransactionController {
     res.status(201).json(response);
   }
 
+  // PUT /api/stock-transactions/:id
+  async update(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const data = req.body;
+
+    const transaction = await stockTransactionService.updateTransaction(parseInt(id), data, userId);
+
+    const response: ApiResponse = {
+      success: true,
+      data: transaction,
+      message: 'Cập nhật giao dịch thành công',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  }
+
   // PUT /api/stock-transactions/:id/post
   async post(req: AuthRequest, res: Response) {
     const { id } = req.params;
