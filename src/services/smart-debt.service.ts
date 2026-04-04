@@ -79,8 +79,9 @@ class SmartDebtService {
       const where: any = { status: 'active' };
       if (blacklist === 'true') {
         where.isBlacklisted = true;
+      } else {
+        where.isBlacklisted = false;
       }
-
 
       if (search) {
         where.OR = [
@@ -92,42 +93,103 @@ class SmartDebtService {
       if (assignedUserId) where.assignedUserId = Number(assignedUserId);
       if (address) where.address = { contains: address };
 
-      if (status) {
-        const debtCondition = { periodName: targetYearStr };
-        if (status === 'unpaid') {
-          where.debtPeriods = { some: { ...debtCondition, closingBalance: { gt: 1000 } } };
-        } else {
-          where.OR = [
-            { debtPeriods: { none: { periodName: targetYearStr } } },
-            { debtPeriods: { some: { ...debtCondition, closingBalance: { lte: 1000 } } } }
-          ];
-        }
+      // Lấy TẤT CẢ khách hàng phù hợp (không phân trang ở DB vì cần tính real-time rồi sort)
+      const customers = await prisma.customer.findMany({
+        where,
+        include: {
+          assignedUser: { select: { id: true, fullName: true } },
+          paymentReceipts: { orderBy: { receiptDate: 'desc' }, take: 1 } as any,
+          invoices: { where: { orderStatus: { not: 'cancelled' } }, orderBy: { orderDate: 'desc' }, take: 1, select: { orderDate: true } } as any
+        },
+      });
+
+      // Tính real-time cho từng khách hàng
+      const allItems: any[] = [];
+      for (const customer of customers) {
+        const customerId = customer.id;
+        const [incAgg, payAgg] = await Promise.all([
+          prisma.invoice.aggregate({
+            where: { customerId, orderStatus: { not: 'cancelled' } },
+            _sum: { totalAmount: true },
+          }),
+          prisma.paymentReceipt.aggregate({
+            where: { customerId },
+            _sum: { amount: true },
+          }),
+        ]);
+
+        const increase = Number(incAgg._sum.totalAmount || 0);
+        const payment = Number(payAgg._sum.amount || 0);
+        const returnAmount = await this._getCustomerReturnAmountByCustomerIdAndDateRange(
+          prisma, customerId, new Date(0), new Date()
+        );
+        const closingBalance = increase - payment - returnAmount;
+
+        allItems.push(
+          this._mapToDebtItem(
+            customer,
+            {
+              id: 0,
+              openingBalance: 0,
+              increasingAmount: increase,
+              decreasingAmount: payment,
+              returnAmount,
+              adjustmentAmount: 0,
+              closingBalance,
+              updatedAt: new Date(),
+              notes: '',
+            },
+            'customer',
+            targetYearStr,
+          ),
+        );
       }
 
-      const [customers, count] = await Promise.all([
-        prisma.customer.findMany({
-          where, skip, take: Number(limit),
-          include: {
-            assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 },
-            paymentReceipts: { orderBy: { receiptDate: 'desc' }, take: 1 } as any
-          },
-          orderBy: { createdBy: 'desc' }
-        }),
-        prisma.customer.count({ where })
-      ]);
+      // Lọc theo trạng thái
+      let filtered = allItems.filter(Boolean);
+      if (status === 'unpaid') {
+        filtered = filtered.filter(item => item.closingBalance > 1000);
+      } else if (status === 'paid') {
+        filtered = filtered.filter(item => item.closingBalance <= 1000);
+      }
 
-      data = customers.map(c => {
-        const debt = c.debtPeriods[0];
-        return this._mapToDebtItem(c, debt, 'customer', targetYearStr);
+      // Sắp xếp (isWarning trước, sau đó theo closingBalance giảm dần)
+      filtered.sort((a: any, b: any) => {
+        if (a?.isWarning && !b?.isWarning) return -1;
+        if (!a?.isWarning && b?.isWarning) return 1;
+        return (b?.closingBalance ?? 0) - (a?.closingBalance ?? 0);
       });
-      total = count;
+
+      // Tính summary từ toàn bộ dữ liệu (trước phân trang)
+      const inlineSummary = filtered.reduce(
+        (acc: any, item: any) => {
+          acc.increase += Number(item.increasingAmount) || 0;
+          acc.returnAmount += Number(item.returnAmount) || 0;
+          acc.payment += Number(item.decreasingAmount) || 0;
+          acc.closing += Number(item.closingBalance) || 0;
+          return acc;
+        },
+        { opening: 0, increase: 0, returnAmount: 0, payment: 0, closing: 0, adjustmentAmount: 0 },
+      );
+
+      total = filtered.length;
+      data = filtered.slice(skip, skip + Number(limit));
+
+      return {
+        data,
+        meta: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)) || 1,
+          summary: inlineSummary,
+        },
+      };
     }
 
-    // --- 2. LỌC THEO NCC (Query bảng Supplier) ---
+    // --- 2. LỌC THEO NCC (Query bảng Supplier) - vẫn dùng DebtPeriod ---
     else if (type === 'supplier') {
       const where: any = { status: 'active' };
-
       if (search) {
         where.OR = [
           { supplierName: { contains: search } },
@@ -135,129 +197,115 @@ class SmartDebtService {
           { phone: { contains: search } }
         ];
       }
-
       if (assignedUserId) where.assignedUserId = Number(assignedUserId);
       if (address) where.address = { contains: address };
 
-      if (status) {
-        const debtCondition = { periodName: targetYearStr };
-        if (status === 'unpaid') {
-          where.debtPeriods = { some: { ...debtCondition, closingBalance: { gt: 1000 } } };
-        } else {
-          where.OR = [
-            { debtPeriods: { none: { periodName: targetYearStr } } },
-            { debtPeriods: { some: { ...debtCondition, closingBalance: { lte: 1000 } } } }
-          ];
-        }
-      }
-
-      const [suppliers, count] = await Promise.all([
-        prisma.supplier.findMany({
-          where, skip, take: Number(limit),
-          include: {
-            assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 }
-          }
-        }),
-        prisma.supplier.count({ where })
-      ]);
-
-      data = suppliers.map(s => {
-        const debt = s.debtPeriods[0];
-        return this._mapToDebtItem(s, debt, 'supplier', targetYearStr);
+      // Lấy TẤT CẢ NCC phù hợp (không phân trang ở DB vì cần tính real-time rồi sort)
+      const suppliers = await prisma.supplier.findMany({
+        where,
+        include: {
+          assignedUser: { select: { id: true, fullName: true } },
+          paymentVouchers: { orderBy: { paymentDate: 'desc' }, take: 1 } as any,
+          purchaseOrders: { where: { status: { not: 'cancelled' } }, orderBy: { orderDate: 'desc' }, take: 1, select: { orderDate: true } } as any
+        },
       });
-      total = count;
-    }
 
-    // --- 3. TẤT CẢ (Gộp cả Khách hàng và NCC) ---
-    else {
-      const customerWhere: any = { status: 'active' };
-      if (search) {
-        customerWhere.OR = [
-          { customerName: { contains: search } },
-          { customerCode: { contains: search } },
-        ];
+      // Tính real-time cho từng NCC
+      const allItems: any[] = [];
+      for (const supplier of suppliers) {
+        const supplierId = supplier.id;
+        const [incAgg, payAgg] = await Promise.all([
+          prisma.purchaseOrder.aggregate({
+            where: { supplierId, status: { not: 'cancelled' } },
+            _sum: { totalAmount: true },
+          }),
+          prisma.paymentVoucher.aggregate({
+            where: { supplierId },
+            _sum: { amount: true },
+          }),
+        ]);
+
+        const increase = Number(incAgg._sum.totalAmount || 0);
+        const payment = Number(payAgg._sum.amount || 0);
+        const returnAmount = await this._getSupplierReturnAmountBySupplierIdAndDateRange(
+          prisma, supplierId, new Date(0), new Date()
+        );
+        const closingBalance = increase - payment - returnAmount;
+
+        allItems.push(
+          this._mapToDebtItem(
+            supplier,
+            {
+              id: 0,
+              openingBalance: 0,
+              increasingAmount: increase,
+              decreasingAmount: payment,
+              returnAmount,
+              adjustmentAmount: 0,
+              closingBalance,
+              updatedAt: new Date(),
+              notes: '',
+            },
+            'supplier',
+            targetYearStr,
+          ),
+        );
       }
-      if (assignedUserId) customerWhere.assignedUserId = Number(assignedUserId);
-      if (address) customerWhere.address = { contains: address };
 
-      // 2. Tạo điều kiện lọc cho Nhà cung cấp
-      const supplierWhere: any = { status: 'active' };
-      if (search) {
-        supplierWhere.OR = [
-          { supplierName: { contains: search } },
-          { supplierCode: { contains: search } },
-        ];
-      }
-      if (assignedUserId) supplierWhere.assignedUserId = Number(assignedUserId);
-      if (address) supplierWhere.address = { contains: address };
-
-      // 3. Query song song cả 2 bảng
-      const [customers, suppliers] = await Promise.all([
-        prisma.customer.findMany({
-          where: customerWhere,
-          include: {
-            assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 },
-            paymentReceipts: { orderBy: { receiptDate: 'desc' }, take: 1 } as any
-          }
-        }),
-        prisma.supplier.findMany({
-          where: supplierWhere,
-          include: {
-            assignedUser: { select: { id: true, fullName: true } },
-            debtPeriods: { where: { periodName: targetYearStr }, take: 1 }
-          }
-        })
-      ]);
-
-      // 4. Map dữ liệu về chuẩn chung
-      const allData = [
-        ...customers.map(c => this._mapToDebtItem(c, c.debtPeriods[0], 'customer', targetYearStr)),
-        ...suppliers.map(s => this._mapToDebtItem(s, s.debtPeriods[0], 'supplier', targetYearStr))
-      ];
-
-      // 5. Lọc theo trạng thái công nợ (nếu có)
-      let filteredData = allData;
+      // Lọc theo trạng thái
+      let filtered = allItems.filter(Boolean);
       if (status === 'unpaid') {
-        // Thêm check item && ...
-        filteredData = allData.filter(item => item && item.closingBalance > 1000);
+        filtered = filtered.filter(item => item.closingBalance > 1000);
       } else if (status === 'paid') {
-        filteredData = allData.filter(item => item && item.closingBalance <= 1000);
+        filtered = filtered.filter(item => item.closingBalance <= 1000);
       }
 
-      // 6. Sắp xếp (Ưu tiên những ai bị cảnh báo isWarning lên đầu)
-      total = filteredData.length;
-      data = filteredData
-        .sort((a, b) => {
-          if (a?.isWarning && !b?.isWarning) return -1;
-          if (!a?.isWarning && b?.isWarning) return 1;
-          const valA = a?.closingBalance ?? 0;
-          const valB = b?.closingBalance ?? 0;
-          return valB - valA;
-        })
-        .slice(skip, skip + Number(limit));
+      // Sắp xếp
+      filtered.sort((a: any, b: any) => {
+        if (a?.isWarning && !b?.isWarning) return -1;
+        if (!a?.isWarning && b?.isWarning) return 1;
+        return (b?.closingBalance ?? 0) - (a?.closingBalance ?? 0);
+      });
+
+      // Tính summary từ toàn bộ dữ liệu
+      const inlineSummary = filtered.reduce(
+        (acc: any, item: any) => {
+          acc.increase += Number(item.increasingAmount) || 0;
+          acc.returnAmount += Number(item.returnAmount) || 0;
+          acc.payment += Number(item.decreasingAmount) || 0;
+          acc.closing += Number(item.closingBalance) || 0;
+          return acc;
+        },
+        { opening: 0, increase: 0, returnAmount: 0, payment: 0, closing: 0, adjustmentAmount: 0 },
+      );
+
+      total = filtered.length;
+      data = filtered.slice(skip, skip + Number(limit));
+
+      return {
+        data,
+        meta: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)) || 1,
+          summary: inlineSummary,
+        },
+      };
     }
 
     const globalSummary = await this.getGlobalSummary(targetYearStr, type, assignedUserId, blacklist);
-
-    const result = {
-      data, // Biến data lấy từ logic query List (bước trước)
+    return {
+      data,
       meta: {
         total,
         page: Number(page),
         limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-        summary: globalSummary // ✅ Số liệu này luôn đúng và cố định
-      }
+        totalPages: Math.ceil(total / Number(limit)) || 1,
+        summary: globalSummary,
+      },
     };
-
-    return result;
   }
-
-  // =========================================================================
-  // 🛠️ HELPER: TÍNH TỔNG TOÀN CỤC (CỐ ĐỊNH THEO NĂM & LOẠI)
-  // =========================================================================
   async getGlobalSummary(year: string, type?: string, assignedUserId?: number, blacklist?: string) {
     // Điều kiện lọc CỐ ĐỊNH: Chỉ theo Năm và Loại (Khách/NCC)
     // ⚠️ TUYỆT ĐỐI KHÔNG đưa Search Text hay Tỉnh Thành vào đây
@@ -269,9 +317,13 @@ class SmartDebtService {
     } else if (type === 'supplier') {
       where.supplierId = { not: null };
     } else {
-      // type === all
+      // type === all: cũng phải tách biệt blacklist
       if (blacklist === 'true') {
+         where.customerId = { not: null };
          where.customer = { isBlacklisted: true };
+      } else {
+         // Loại bỏ công nợ của khách blacklist khỏi tổng hợp chung
+         where.NOT = { customer: { isBlacklisted: true } };
       }
     }
 
@@ -319,17 +371,33 @@ class SmartDebtService {
        const oneYearAgo = new Date();
        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
        
+       // Check last payment date
        let lastPaymentDate: Date | null = null;
        if (obj.paymentReceipts && obj.paymentReceipts.length > 0) {
           lastPaymentDate = new Date(obj.paymentReceipts[0].receiptDate);
        }
 
-       const noPaymentInOneYear = !lastPaymentDate || lastPaymentDate < oneYearAgo;
+       // Check last invoice/order date (most recent activity)
+       let lastInvoiceDate: Date | null = null;
+       if (obj.invoices && obj.invoices.length > 0) {
+          lastInvoiceDate = new Date(obj.invoices[0].orderDate);
+       }
+
+       // Determine the most recent activity date (payment or invoice)
+       let lastActivityDate: Date | null = null;
+       if (lastPaymentDate && lastInvoiceDate) {
+          lastActivityDate = lastPaymentDate > lastInvoiceDate ? lastPaymentDate : lastInvoiceDate;
+       } else {
+          lastActivityDate = lastPaymentDate || lastInvoiceDate;
+       }
+
+       // Warning only if NO activity (payment or purchase) in the last year
+       const noActivityInOneYear = !lastActivityDate || lastActivityDate < oneYearAgo;
 
        const debtExtensionDate = obj.debtExtensionDate ? new Date(obj.debtExtensionDate) : null;
        const noActiveExtension = !debtExtensionDate || debtExtensionDate < new Date();
 
-       isWarning = noPaymentInOneYear && noActiveExtension;
+       isWarning = noActivityInOneYear && noActiveExtension;
     }
 
     return {
@@ -461,7 +529,7 @@ class SmartDebtService {
             // Map unitValue cho InvoiceDetail: unitValue = lineTotal / lineQty
             const invoiceDetails = await prisma.invoiceDetail.findMany({
               where: { orderId: { in: allowedOrderIds } },
-              select: { orderId: true, productId: true, quantity: true, total: true }
+              select: { orderId: true, productId: true, quantity: true, total: true, price: true }
             });
 
             const unitValueMap = new Map<string, number>();
@@ -469,7 +537,9 @@ class SmartDebtService {
               const qty = this._toNumber(d.quantity);
               if (!qty) continue;
               const total = this._toNumber(d.total);
-              unitValueMap.set(`${d.orderId}:${d.productId}`, total / qty);
+              
+              const unit = total > 0 ? (total / qty) : this._toNumber((d as any).price);
+              unitValueMap.set(`${d.orderId}:${d.productId}`, unit);
             }
 
             const filteredReturns = stockReturns.filter(r => r.referenceId && allowedSet.has(r.referenceId));
@@ -579,7 +649,7 @@ class SmartDebtService {
           if (allowedPoIds.length > 0) {
             const poDetails = await prisma.purchaseOrderDetail.findMany({
               where: { poId: { in: allowedPoIds } },
-              select: { poId: true, productId: true, quantity: true, total: true }
+              select: { poId: true, productId: true, quantity: true, total: true, price: true }
             });
 
             const unitValueMap = new Map<string, number>();
@@ -587,7 +657,9 @@ class SmartDebtService {
               const qty = this._toNumber(d.quantity);
               if (!qty) continue;
               const total = this._toNumber(d.total);
-              unitValueMap.set(`${d.poId}:${d.productId}`, total / qty);
+
+              const unit = total > 0 ? (total / qty) : this._toNumber((d as any).price);
+              unitValueMap.set(`${d.poId}:${d.productId}`, unit);
             }
 
             const filteredReturns = stockReturns.filter(r => r.referenceId && allowedSet.has(r.referenceId))
@@ -1742,9 +1814,9 @@ class SmartDebtService {
 
     // Gộp tất cả và lọc trùng (Set)
     const ids = new Set([
-      ...orders.map(o => o.customerId),
-      ...receipts.map(r => r.customerId),
-      ...returnCustomerIds
+      ...orders.map(o => o.customerId).filter(id => id !== null) as number[],
+      ...receipts.map(r => r.customerId).filter(id => id !== null) as number[],
+      ...returnCustomerIds.filter(id => id !== null) as number[]
     ]);
 
     return Array.from(ids);
@@ -1890,23 +1962,25 @@ class SmartDebtService {
 
     const purchaseOrders = await tx.purchaseOrder.findMany({
       where: { id: { in: poIds } },
-      select: { id: true, taxRate: true },
+      select: { id: true, taxAmount: true, subTotal: true },
     });
 
     const taxRateMap = new Map<number, number>();
     for (const po of purchaseOrders) {
-      taxRateMap.set(po.id, this._toNumber(po.taxRate));
+      const sub = this._toNumber(po.subTotal);
+      const tax = this._toNumber(po.taxAmount);
+      taxRateMap.set(po.id, sub > 0 ? (tax / sub) * 100 : 0);
     }
 
     // Map (poId, productId) -> unitPrice (pre-tax, from PurchaseOrderDetail)
     const poDetails = await tx.purchaseOrderDetail.findMany({
       where: { poId: { in: poIds } },
-      select: { poId: true, productId: true, unitPrice: true },
+      select: { poId: true, productId: true, price: true },
     });
 
     const unitPriceMap = new Map<string, number>();
     for (const d of poDetails) {
-      unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.unitPrice));
+      unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.price));
     }
 
     let totalReturn = 0;
@@ -1968,15 +2042,17 @@ class SmartDebtService {
 
     const invoiceDetails = await tx.invoiceDetail.findMany({
       where: { orderId: { in: Array.from(allowedSet) } },
-      select: { orderId: true, productId: true, quantity: true, total: true },
+      select: { orderId: true, productId: true, quantity: true, total: true, price: true, gift: true },
     })
 
     const unitValueMap = new Map<string, number>()
     for (const d of invoiceDetails) {
+      if ((d as any).gift) continue
       const qty = this._toNumber(d.quantity)
       if (!qty) continue
       const total = this._toNumber(d.total)
-      unitValueMap.set(`${d.orderId}:${d.productId}`, total / qty)
+      const unit = total > 0 ? (total / qty) : this._toNumber((d as any).price)
+      unitValueMap.set(`${d.orderId}:${d.productId}`, unit)
     }
 
     let totalReturn = 0
@@ -2023,24 +2099,30 @@ class SmartDebtService {
 
     const allowedPos = await tx.purchaseOrder.findMany({
       where: { id: { in: poIds }, supplierId: Number(supplierId), status: { not: 'cancelled' } },
-      select: { id: true, taxRate: true },
+      select: { id: true, taxAmount: true, subTotal: true },
     })
     const allowedSet = new Set(allowedPos.map((p: any) => p.id))
     if (!allowedSet.size) return 0
 
     const taxRateMap = new Map<number, number>()
     for (const po of allowedPos) {
-      taxRateMap.set(po.id, this._toNumber(po.taxRate))
+      const sub = this._toNumber(po.subTotal)
+      const tax = this._toNumber(po.taxAmount)
+      taxRateMap.set(po.id, sub > 0 ? (tax / sub) * 100 : 0)
     }
 
     const poDetails = await tx.purchaseOrderDetail.findMany({
       where: { poId: { in: Array.from(allowedSet) } },
-      select: { poId: true, productId: true, unitPrice: true },
+      select: { poId: true, productId: true, quantity: true, total: true, price: true },
     })
 
     const unitPriceMap = new Map<string, number>()
     for (const d of poDetails) {
-      unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.unitPrice))
+      const qty = this._toNumber(d.quantity)
+      if (!qty) continue
+      const total = this._toNumber(d.total)
+      const unit = total > 0 ? (total / qty) : this._toNumber((d as any).price)
+      unitPriceMap.set(`${d.poId}:${d.productId}`, unit)
     }
 
     let totalReturn = 0
@@ -2101,15 +2183,17 @@ class SmartDebtService {
 
     const invoiceDetails = await tx.invoiceDetail.findMany({
       where: { orderId: { in: Array.from(allowedSet) } },
-      select: { orderId: true, productId: true, quantity: true, total: true },
+      select: { orderId: true, productId: true, quantity: true, total: true, price: true, gift: true },
     })
 
     const unitValueMap = new Map<string, number>()
     for (const d of invoiceDetails) {
+      if ((d as any).gift) continue
       const qty = this._toNumber(d.quantity)
       if (!qty) continue
       const total = this._toNumber(d.total)
-      unitValueMap.set(`${d.orderId}:${d.productId}`, total / qty)
+      const unit = total > 0 ? (total / qty) : this._toNumber((d as any).price)
+      unitValueMap.set(`${d.orderId}:${d.productId}`, unit)
     }
 
     let totalReturn = 0
@@ -2159,7 +2243,7 @@ class SmartDebtService {
           ? { supplier: { assignedUserId: Number(assignedUserId) } }
           : {}),
       },
-      select: { id: true, taxRate: true },
+      select: { id: true, taxAmount: true, subTotal: true },
     })
 
     const allowedSet = new Set(allowedPos.map((p: any) => p.id))
@@ -2167,17 +2251,19 @@ class SmartDebtService {
 
     const taxRateMap = new Map<number, number>()
     for (const po of allowedPos) {
-      taxRateMap.set(po.id, this._toNumber(po.taxRate))
+      const sub = this._toNumber(po.subTotal)
+      const tax = this._toNumber(po.taxAmount)
+      taxRateMap.set(po.id, sub > 0 ? (tax / sub) * 100 : 0)
     }
 
     const poDetails = await tx.purchaseOrderDetail.findMany({
       where: { poId: { in: Array.from(allowedSet) } },
-      select: { poId: true, productId: true, unitPrice: true },
+      select: { poId: true, productId: true, price: true },
     })
 
     const unitPriceMap = new Map<string, number>()
     for (const d of poDetails) {
-      unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.unitPrice))
+      unitPriceMap.set(`${d.poId}:${d.productId}`, this._toNumber(d.price))
     }
 
     let totalReturn = 0
@@ -2292,7 +2378,7 @@ class SmartDebtService {
 
       const txnCustomerIds = Array.from(txnCustomerIdSet)
       if (txnCustomerIds.length > 0) {
-        const whereBase: any = { status: 'active', id: { in: txnCustomerIds } }
+        const whereBase: any = { status: 'active', id: { in: txnCustomerIds }, isBlacklisted: false }
         if (assignedUserId) whereBase.assignedUserId = Number(assignedUserId)
         if (search) {
           whereBase.OR = [
@@ -2312,7 +2398,11 @@ class SmartDebtService {
             phone: true,
             address: true,
             avatarUrl: true,
+            isBlacklisted: true,
+            debtExtensionDate: true,
             assignedUser: { select: { id: true, fullName: true } },
+            paymentReceipts: { orderBy: { receiptDate: 'desc' as any }, take: 1 } as any,
+            invoices: { where: { orderStatus: { not: 'cancelled' } }, orderBy: { orderDate: 'desc' as any }, take: 1, select: { orderDate: true } } as any,
           },
         })
 
@@ -2373,6 +2463,10 @@ class SmartDebtService {
 
           const openingBalance = openingSales - openingPayments - returnOpening
           const closingBalance = openingBalance + increase - payment - returnAmount
+
+          // Bỏ qua khách không có hoạt động trong tháng VÀ nợ cuối kỳ <= 0
+          const hasActivityThisMonth = increase > 0 || payment > 0 || returnAmount > 0
+          if (!hasActivityThisMonth && closingBalance <= 0) continue
 
           allItems.push(
             this._mapToDebtItem(

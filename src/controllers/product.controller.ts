@@ -58,6 +58,22 @@ class ProductController {
     res.status(200).json(response);
   }
 
+  // GET /api/products/:id/sale-history
+  async getSaleHistory(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const query = req.query;
+
+    const result = await productService.getSaleHistory(parseInt(id), query);
+
+    const response: ApiResponse = {
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(200).json(response);
+  }
+
   // POST /api/products
   async create(req: AuthRequest, res: Response) {
     const userId = req.user!.id;

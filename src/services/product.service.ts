@@ -552,6 +552,102 @@ class ProductService {
 
   // Image and video upload methods removed - use single image field in Product model instead
 
+  async getSaleHistory(productId: number, query: any) {
+    const { page = 1, limit = 10, fromDate, toDate } = query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    const where: Prisma.InvoiceDetailWhereInput = {
+      productId,
+      order: {
+        orderStatus: 'completed',
+        deletedAt: null,
+        ...(fromDate && toDate && {
+          orderDate: {
+            gte: new Date(fromDate),
+            lte: new Date(`${toDate}T23:59:59.999Z`),
+          },
+        }),
+      },
+    };
+
+    const total = await prisma.invoiceDetail.count({ where });
+
+    const data = await prisma.invoiceDetail.findMany({
+      where,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderCode: true,
+            orderStatus: true,
+            createdAt: true,
+            customer: {
+              select: {
+                id: true,
+                customerName: true,
+                phone: true,
+                email: true,
+                address: true,
+                taxCode: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { 
+        order: {
+          createdAt: 'desc' 
+        }
+      },
+      skip: offset,
+      take: Number(limit),
+    });
+
+    const allRecords = await prisma.invoiceDetail.findMany({
+      where,
+      select: {
+        quantity: true,
+        unitName: true,
+      },
+    });
+
+    const totalsByUnitObj: Record<string, number> = {};
+    for (const record of allRecords) {
+      const uName = record.unitName || 'Default';
+      totalsByUnitObj[uName] = (totalsByUnitObj[uName] || 0) + Number(record.quantity);
+    }
+
+    const totalsByUnit = Object.keys(totalsByUnitObj).map((k) => ({
+      unitName: k,
+      total: totalsByUnitObj[k],
+    }));
+
+    // Format response to match existing frontend mapping (customer.name vs customer.customerName)
+    const formattedData = data.map((item) => ({
+      ...item,
+      invoice: item.order ? {
+        ...item.order,
+        code: item.order.orderCode,
+        customer: item.order.customer ? {
+          ...item.order.customer,
+          name: item.order.customer.customerName,
+        } : null
+      } : null,
+      createdAt: item.order?.createdAt, // for frontend sorting/display
+    }));
+
+    return {
+      data: formattedData,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+      totalsByUnit,
+    };
+  }
+
   async getStats() {
 
     // Get all products with counts

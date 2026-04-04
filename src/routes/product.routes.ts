@@ -79,6 +79,14 @@ router.get(
   asyncHandler(productController.getById.bind(productController))
 );
 
+// GET /api/products/:id/sale-history
+router.get(
+  '/:id/sale-history',
+  authorize('GET_PRODUCT'),
+  validate(productIdSchema, 'params'),
+  asyncHandler(productController.getSaleHistory.bind(productController))
+);
+
 // POST /api/products
 router.post(
   '/',
