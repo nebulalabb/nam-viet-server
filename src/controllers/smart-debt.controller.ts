@@ -24,7 +24,7 @@ class SmartDebtController {
    */
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const { page, limit, search, status, year, assignedUserId, type, address } = req.query;
+      const { page, limit, search, status, year, assignedUserId, type, address, blacklist } = req.query;
 
       const result = await debtService.getAll({
         page: Number(page) || 1,
@@ -34,7 +34,8 @@ class SmartDebtController {
         year: year ? Number(year) : undefined,
         assignedUserId: assignedUserId ? Number(assignedUserId) : undefined,
         type: type as 'customer' | 'supplier',
-        address: address as string
+        address: address as string,
+        blacklist: blacklist as string
       });
 
       res.status(200).json({

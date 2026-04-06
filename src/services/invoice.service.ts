@@ -308,11 +308,12 @@ class InvoiceService {
       }),
       prisma.stockTransaction.findMany({
         where: {
-          referenceType: 'invoice',
+          referenceType: { in: ['invoice', 'sale_refunds'] },
           referenceId: id,
           deletedAt: null
         },
         include: {
+          details: true,
           creator: {
             select: {
               id: true,
@@ -408,13 +409,15 @@ class InvoiceService {
       }
     }
 
-    const productIds = data.items.map((item) => item.productId);
+    const productIds = Array.from(new Set(data.items.map((item) => Number(item.productId))));
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
     });
 
     if (products.length !== productIds.length) {
-      throw new NotFoundError('Một hoặc nhiều sản phẩm không tồn tại');
+      const foundIds = products.map((p) => p.id);
+      const missingIds = productIds.filter((id) => !foundIds.includes(id));
+      throw new NotFoundError(`Sản phẩm không đồng bộ. productIds: ${JSON.stringify(productIds)}, found: ${JSON.stringify(foundIds)}, missing: ${JSON.stringify(missingIds)}`);
     }
 
     for (const product of products) {
@@ -551,8 +554,12 @@ class InvoiceService {
     }
     const orderCode = await this.generateOrderCode();
 
-    // Set order status based on requireApproval
-    const initialOrderStatus = data.requireApproval ? 'pending' : 'preparing';
+    // Không auto-complete khi tạo đơn, kể cả khi khách trả trước.
+    // Đơn bán chỉ auto-complete khi có phiếu XK đầy đủ + thanh toán đủ (qua phiếu thu hoặc credit trả trước).
+    // Logic auto-complete nằm trong checkAndCompleteOrder().
+    let initialOrderStatus = data.requireApproval ? 'pending' : 'preparing';
+    let paymentStatus = paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
+    let isFullyPrepaid = false;
 
     let result: any;
 
@@ -567,7 +574,9 @@ class InvoiceService {
         userId,
         inventoryShortages,
         effectiveDiscountAmount,
-        initialOrderStatus
+        initialOrderStatus,
+        paymentStatus,
+        isFullyPrepaid
       );
     } else {
       result = await this.createDeliveryOrder(
@@ -579,7 +588,9 @@ class InvoiceService {
         userId,
         inventoryShortages,
         effectiveDiscountAmount,
-        initialOrderStatus
+        initialOrderStatus,
+        paymentStatus,
+        isFullyPrepaid
       );
     }
 
@@ -626,7 +637,9 @@ class InvoiceService {
     userId: number,
     inventoryShortages: any[],
     discountAmount: number,
-    initialOrderStatus: string
+    initialOrderStatus: string,
+    paymentStatus: string,
+    isFullyPrepaid: boolean
   ) {
     if (inventoryShortages.length > 0) {
       throw new ValidationError(
@@ -647,10 +660,10 @@ class InvoiceService {
         discountAmount,
         shippingFee: 0,
         taxAmount: Number(data.taxAmount) || 0,
-        paidAmount,
-        paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+        paidAmount: isFullyPrepaid ? totalAmount : paidAmount,
+        paymentStatus: paymentStatus as any,
         orderStatus: initialOrderStatus as string as any,
-        completedAt: null, // Since it can be preparing/pending, it's not completed yet
+        completedAt: initialOrderStatus === 'completed' ? new Date() : null,
         deliveryAddress: null,
         notes: data.notes,
         createdBy: userId,
@@ -687,8 +700,10 @@ class InvoiceService {
       },
     });
 
-    // Cập nhật công nợ khách hàng nếu đơn hàng chưa thanh toán đủ
-    const debtAmount = totalAmount - paidAmount;
+    // Cập nhật công nợ khách hàng
+    // Nếu isFullyPrepaid, ta xem như đã "thanh toán" bằng cách trừ số dư trả trước.
+    // Việc này tương đương với tăng currentDebt lên totalAmount (vì currentDebt đang là số âm)
+    const debtAmount = totalAmount - (isFullyPrepaid ? 0 : paidAmount);
     if (debtAmount > 0 && Number(data.customerId) > 0) {
       await prisma.customer.update({
         where: { id: Number(data.customerId) },
@@ -718,7 +733,9 @@ class InvoiceService {
     userId: number,
     inventoryShortages: any[],
     discountAmount: number,
-    initialOrderStatus: string
+    initialOrderStatus: string,
+    paymentStatus: string,
+    isFullyPrepaid: boolean
   ) {
     // Tạo đơn bán + chi tiết với trạng thái ban đầu.
     // Phiếu giao hàng, phiếu xuất kho, phiếu thu sẽ tạo thủ công riêng biệt.
@@ -733,9 +750,10 @@ class InvoiceService {
         discountAmount,
         shippingFee: Number(data.shippingFee) || 0,
         taxAmount: Number(data.taxAmount) || 0,
-        paidAmount,
-        paymentStatus: paidAmount >= totalAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+        paidAmount: isFullyPrepaid ? totalAmount : paidAmount,
+        paymentStatus: paymentStatus as any,
         orderStatus: initialOrderStatus as string as any,
+        completedAt: initialOrderStatus === 'completed' ? new Date() : null,
         expectedDeliveryDate: data.expectedDeliveryDate ? new Date(data.expectedDeliveryDate) : null,
         deliveryAddress: data.deliveryAddress,
         recipientName: data.recipientName || null,
@@ -775,8 +793,8 @@ class InvoiceService {
       },
     });
 
-    // Cập nhật công nợ khách hàng nếu đơn hàng chưa thanh toán đủ
-    const debtAmount = totalAmount - paidAmount;
+    // Cập nhật công nợ khách hàng
+    const debtAmount = totalAmount - (isFullyPrepaid ? 0 : paidAmount);
     if (debtAmount > 0 && Number(data.customerId) > 0) {
       await prisma.customer.update({
         where: { id: Number(data.customerId) },
@@ -1429,22 +1447,8 @@ class InvoiceService {
       if (hasPrepaidCredit && order.paymentStatus !== 'paid') {
         updateData.paymentStatus = 'paid';
         updateData.paidAmount = Number(order.totalAmount);
-
-        // Trừ tiền đơn hàng từ credit trả trước (tăng currentDebt vì currentDebt đang âm)
-        const invoiceTotal = Number(order.totalAmount);
-        const alreadyPaid = Number(order.paidAmount || 0);
-        const remainingToPay = invoiceTotal - alreadyPaid;
-        if (remainingToPay > 0 && order.customerId) {
-          await tx.customer.update({
-            where: { id: order.customerId },
-            data: {
-              currentDebt: {
-                increment: remainingToPay,
-              },
-              debtUpdatedAt: new Date(),
-            },
-          });
-        }
+        // Không cần increment currentDebt ở đây vì đã được tính tại thời điểm tạo đơn hàng.
+        // Khi tạo đơn, debtAmount = totalAmount - paidAmount đã được cộng vào currentDebt.
       }
 
       await tx.invoice.update({

@@ -306,6 +306,7 @@ model Supplier {
   purchaseOrders  PurchaseOrder[]
   products        Product[]
   paymentVouchers PaymentVoucher[]
+  paymentReceipts PaymentReceipt[] @relation("SupplierRefund")
   // debtReconciliations DebtReconciliation[]
   debtPeriods     DebtPeriod[]
 
@@ -339,6 +340,7 @@ model PurchaseOrder {
   approver User?                 @relation("POApprover", fields: [approvedBy], references: [id])
   details  PurchaseOrderDetail[]
   paymentVouchers PaymentVoucher[] @relation("PurchaseOrderPayment")
+  refundReceipts  PaymentReceipt[] @relation("PurchaseOrderRefund")
 
   @@index([poCode])
   @@index([status])
@@ -879,8 +881,10 @@ model PaymentReceipt {
   id                   Int                  @id @default(autoincrement())
   receiptCode          String               @unique @map("receipt_code") @db.VarChar(50)
   receiptType          ReceiptType          @map("receipt_type")
-  customerId           Int                  @map("customer_id")
+  customerId           Int?                 @map("customer_id")
+  supplierId           Int?                 @map("supplier_id")
   orderId              Int?                 @map("order_id")
+  purchaseOrderId      Int?                 @map("purchase_order_id")
   amount               Decimal              @db.Decimal(15, 2)
   paymentMethod        FinancePaymentMethod @map("payment_method")
   bankName             String?              @map("bank_name") @db.VarChar(200)
@@ -892,9 +896,11 @@ model PaymentReceipt {
   createdAt            DateTime             @default(now()) @map("created_at")
   deletedAt            DateTime?            @map("deleted_at")
 
-  customer    Invoice? @relation(fields: [orderId], references: [id])
-  customerRef Customer @relation(fields: [customerId], references: [id])
-  creator     User     @relation("ReceiptCreator", fields: [createdBy], references: [id])
+  customerRef   Customer?      @relation(fields: [customerId], references: [id])
+  invoice       Invoice?       @relation(fields: [orderId], references: [id])
+  supplier      Supplier?      @relation("SupplierRefund", fields: [supplierId], references: [id])
+  purchaseOrder PurchaseOrder? @relation("PurchaseOrderRefund", fields: [purchaseOrderId], references: [id])
+  creator       User           @relation("ReceiptCreator", fields: [createdBy], references: [id])
 
   @@index([receiptCode])
   @@index([receiptDate])

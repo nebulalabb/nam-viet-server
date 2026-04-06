@@ -632,6 +632,7 @@ class FinancialService {
     // Group by customer and sum
     const customerMap = new Map<number, any>();
     for (const receipt of receipts) {
+      if (!receipt.customerRef) continue;
       const cid = receipt.customerRef.id;
       if (!customerMap.has(cid)) {
         customerMap.set(cid, {

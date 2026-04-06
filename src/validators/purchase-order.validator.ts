@@ -161,3 +161,21 @@ export type UpdatePurchaseOrderInput = z.infer<typeof updatePurchaseOrderSchema>
 export type ReceivePurchaseOrderInput = z.infer<typeof receivePurchaseOrderSchema>;
 export type ApprovePurchaseOrderInput = z.infer<typeof approvePurchaseOrderSchema>;
 export type CancelPurchaseOrderInput = z.infer<typeof cancelPurchaseOrderSchema>;
+
+export const returnPurchaseOrderSchema = z.object({
+  warehouseId: z.number().int().positive('ID kho không hợp lệ'),
+  actualDate: z.string().optional().nullable(),
+  reason: z.string().max(255).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+  items: z.array(
+    z.object({
+      id: z.number().optional(), // Detail ID (if needed)
+      productId: z.number().int().positive('ID sản phẩm không hợp lệ'),
+      cancelQty: z.number().min(0),
+      exportQty: z.number().min(0),
+      price: z.number().min(0)
+    })
+  ).min(1, 'Phải có ít nhất một sản phẩm')
+});
+
+export type ReturnPurchaseOrderInput = z.infer<typeof returnPurchaseOrderSchema>;
