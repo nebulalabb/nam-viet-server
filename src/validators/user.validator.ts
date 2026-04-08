@@ -13,9 +13,8 @@ export const createUserSchema = z.object({
     .regex(
       /^[a-zA-Z0-9-_]+$/,
       'Mã nhân viên chỉ được chứa chữ cái, số, dấu gạch ngang và dấu gạch dưới.'
-    )
-    .optional(),
-  email: z.string().email('Định dạng email không hợp lệ').optional(),
+    ),
+  email: z.string().email('Định dạng email không hợp lệ').optional().or(z.literal('')),
   password: z
     .string()
     .min(8, 'Mật khẩu phải có ít nhất 8 ký tự.')
@@ -25,8 +24,7 @@ export const createUserSchema = z.object({
     .regex(
       /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/,
       'Mật khẩu phải chứa ít nhất một ký tự đặc biệt.'
-    )
-    .optional(),
+    ).optional().or(z.literal('')),
   fullName: z
     .string('Tên không hợp lệ')
     .min(2, 'Mật khẩu phải chứa ít nhất một ký tự đặc biệt.')

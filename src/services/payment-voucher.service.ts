@@ -177,6 +177,15 @@ class PaymentVoucherService {
             email: true,
           },
         },
+        purchaseOrder: {
+          include: {
+            details: {
+              include: {
+                product: true,
+              }
+            }
+          }
+        }
       },
     });
 

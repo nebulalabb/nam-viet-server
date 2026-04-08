@@ -65,9 +65,8 @@ class AuthService {
       );
     }
 
-    // Nhân viên không có tài khoản hệ thống (passwordHash = null)
-    if (!user.passwordHash) {
-      throw new AuthenticationError('Tài khoản này chưa được cấp quyền đăng nhập hệ thống. Vui lòng liên hệ quản trị viên');
+    if (!user.passwordHash || !user.email) {
+      throw new AuthenticationError('Tài khoản chưa được cấp quyền đăng nhập');
     }
 
     const isPasswordValid = await comparePassword(password, user.passwordHash);
@@ -128,8 +127,8 @@ class AuthService {
       throw new NotFoundError('Người dùng không tồn tại');
     }
 
-    if (!user.passwordHash) {
-      throw new ValidationError('Tài khoản này chưa được cấp mật khẩu. Vui lòng liên hệ quản trị viên');
+    if (!user.passwordHash || !user.email) {
+      throw new AuthenticationError('Tài khoản chưa được cấp quyền đăng nhập');
     }
 
     const isOldPasswordValid = await comparePassword(oldPassword, user.passwordHash);
@@ -155,7 +154,9 @@ class AuthService {
     });
 
     // Send notification email
-    await emailService.sendPasswordChangedEmail(user.email!, user.fullName);
+    if (user.email) {
+      await emailService.sendPasswordChangedEmail(user.email, user.fullName);
+    }
 
     return { message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại' };
   }
@@ -186,7 +187,7 @@ class AuthService {
 
     const resetToken = this.generateResetToken();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    
+
 
     await prisma.verificationCode.create({
       data: {
@@ -549,6 +550,8 @@ class AuthService {
     if (!user || user.status !== 'active') {
       throw new AuthenticationError('Yêu cầu không hợp lệ');
     }
+
+    if (!user.email) throw new AuthenticationError('Tài khoản chưa có email');
 
     const { code, expiresIn } = await this.createOTPCode(user.id, user.email!, ipAddress);
 

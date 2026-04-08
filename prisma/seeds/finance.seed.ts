@@ -1,4 +1,4 @@
-import { PrismaClient, ReceiptType, VoucherType, PaymentMethod, PaymentVoucherStatus } from '@prisma/client';
+import { PrismaClient, ReceiptType, PaymentMethod } from '@prisma/client';
 
 export async function seedFinancial(prisma: PrismaClient, adminId: number) {
   const invoices = await prisma.invoice.findMany({ take: 30 });
@@ -34,13 +34,13 @@ export async function seedFinancial(prisma: PrismaClient, adminId: number) {
       await prisma.paymentVoucher.create({
         data: {
           voucherCode: `VOU-2024-${po.id.toString().padStart(4, '0')}`,
-          voucherType: 'supplier_payment' as any, // Using type casting to bypass TS issues if VoucherType changes
+          voucherType: 'supplier_payment' as any,
           supplierId: po.supplierId,
           amount: po.totalAmount,
           paymentMethod: 'transfer' as any,
           bankName: 'Techcombank',
-          paymentDate: new Date(new Date(po.orderDate).getTime() + 1000 * 60 * 60 * 24 * 3), // Thanh toán sau 3 ngày
-          status: 'completed' as any,
+          paymentDate: new Date(new Date(po.orderDate).getTime() + 1000 * 60 * 60 * 24 * 3),
+          status: 'posted' as any,
           postedAt: new Date(new Date(po.orderDate).getTime() + 1000 * 60 * 60 * 24 * 3),
           reason: 'Thanh toán đơn mua hàng ' + po.poCode,
           createdBy: staffId,
