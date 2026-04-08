@@ -78,7 +78,7 @@ class AuthService {
     this.clearLoginAttempts(email);
 
     // Create OTP code and send via email
-    const { code, expiresIn } = await this.createOTPCode(user.id, user.email, ipAddress);
+    const { code, expiresIn } = await this.createOTPCode(user.id, user.email!, ipAddress);
 
     // Send OTP via email
     const emailSent = await emailService.sendEmail({
@@ -208,7 +208,7 @@ class AuthService {
 
     // Log activity
     logActivity('forgot_password', user.id, 'auth', {
-      email: user.email,
+      email: user.email!,
       emailSent,
     });
 

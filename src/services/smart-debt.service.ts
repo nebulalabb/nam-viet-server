@@ -336,17 +336,54 @@ class SmartDebtService {
     }
 
     // Thực hiện tính toán
-    const agg = await prisma.debtPeriod.aggregate({
-      _sum: {
-        openingBalance: true,
-        increasingAmount: true,
-        decreasingAmount: true,
-        returnAmount: true,      // Tổng trả hàng
-        adjustmentAmount: true,  // Tổng điều chỉnh
-        closingBalance: true
-      },
-      where
-    });
+    let agg: any;
+    let blacklistDebt = 0;
+
+    if (type === 'customer') {
+       agg = await prisma.debtPeriod.aggregate({
+        _sum: { openingBalance: true, increasingAmount: true, decreasingAmount: true, returnAmount: true, adjustmentAmount: true, closingBalance: true },
+        where: { ...where, customer: { isBlacklisted: false } }
+      });
+      const aggBlacklist = await prisma.debtPeriod.aggregate({
+        _sum: { closingBalance: true },
+        where: { ...where, customer: { isBlacklisted: true } }
+      });
+      blacklistDebt = Number(aggBlacklist._sum.closingBalance || 0);
+    } else if (type === 'supplier') {
+      agg = await prisma.debtPeriod.aggregate({
+        _sum: { openingBalance: true, increasingAmount: true, decreasingAmount: true, returnAmount: true, adjustmentAmount: true, closingBalance: true },
+        where
+      });
+    } else {
+      // For all, we split by type
+      const customerWhere = { ...where, customerId: { not: null } };
+      const supplierWhere = { ...where, supplierId: { not: null } };
+      
+      const aggCustomerNormal = await prisma.debtPeriod.aggregate({
+        _sum: { openingBalance: true, increasingAmount: true, decreasingAmount: true, returnAmount: true, adjustmentAmount: true, closingBalance: true },
+        where: { ...customerWhere, customer: { isBlacklisted: false } }
+      });
+      const aggCustomerBlacklist = await prisma.debtPeriod.aggregate({
+        _sum: { closingBalance: true },
+        where: { ...customerWhere, customer: { isBlacklisted: true } }
+      });
+      const aggSupplier = await prisma.debtPeriod.aggregate({
+        _sum: { openingBalance: true, increasingAmount: true, decreasingAmount: true, returnAmount: true, adjustmentAmount: true, closingBalance: true },
+        where: supplierWhere
+      });
+      
+      blacklistDebt = Number(aggCustomerBlacklist._sum.closingBalance || 0);
+      agg = {
+        _sum: {
+          openingBalance: Number(aggCustomerNormal._sum.openingBalance || 0) + Number(aggSupplier._sum.openingBalance || 0),
+          increasingAmount: Number(aggCustomerNormal._sum.increasingAmount || 0) + Number(aggSupplier._sum.increasingAmount || 0),
+          decreasingAmount: Number(aggCustomerNormal._sum.decreasingAmount || 0) + Number(aggSupplier._sum.decreasingAmount || 0),
+          returnAmount: Number(aggCustomerNormal._sum.returnAmount || 0) + Number(aggSupplier._sum.returnAmount || 0),
+          adjustmentAmount: Number(aggCustomerNormal._sum.adjustmentAmount || 0) + Number(aggSupplier._sum.adjustmentAmount || 0),
+          closingBalance: Number(aggCustomerNormal._sum.closingBalance || 0) + Number(aggSupplier._sum.closingBalance || 0),
+        }
+      };
+    }
 
     return {
       opening: Number(agg._sum.openingBalance || 0),
@@ -355,6 +392,7 @@ class SmartDebtService {
       returnAmount: Number(agg._sum.returnAmount || 0),
       adjustmentAmount: Number(agg._sum.adjustmentAmount || 0),
       closing: Number(agg._sum.closingBalance || 0),
+      blacklistDebt: blacklistDebt,
     };
   }
 
