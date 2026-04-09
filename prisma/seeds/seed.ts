@@ -361,6 +361,9 @@ async function main() {
     { key: "UPDATE_DEBT", name: "Sửa", module: "debt", moduleLabel: "Công nợ" },
     { key: "DELETE_DEBT", name: "Xóa", module: "debt", moduleLabel: "Công nợ" },
     { key: "VIEW_DEBT_RECONCILIATION", name: "Xem đối chiếu công nợ", module: "debt", moduleLabel: "Công nợ" },
+    { key: "CREATE_DEBT_RECONCILIATION", name: "Tạo đối chiếu công nợ", module: "debt", moduleLabel: "Công nợ" },
+    { key: "UPDATE_DEBT_RECONCILIATION", name: "Cập nhật đối chiếu công nợ", module: "debt", moduleLabel: "Công nợ" },
+    { key: "DELETE_DEBT_RECONCILIATION", name: "Xóa đối chiếu công nợ", module: "debt", moduleLabel: "Công nợ" },
 
     // Quản lý kho
     { key: "GET_WAREHOUSE", name: "Xem", module: "warehouse", moduleLabel: "Kho" },
@@ -653,6 +656,54 @@ async function main() {
   );
 
   console.log(`✅ Assigned ${rolePermissions.length} permissions to admin role\n`);
+  
+  // Assign debt permissions to accountant and sales_staff
+  console.log('📝 Assigning debt permissions to accountant and sales staff...');
+  const debtPermissions = permissions.filter(p => p.module === 'debt' || p.permissionKey.includes('DEBT'));
+
+  if (accountantRole) {
+    await Promise.all(
+      debtPermissions.map((p) =>
+        prisma.rolePermission.upsert({
+          where: {
+            roleId_permissionId: {
+              roleId: accountantRole.id,
+              permissionId: p.id,
+            },
+          },
+          update: {},
+          create: {
+            roleId: accountantRole.id,
+            permissionId: p.id,
+            assignedBy: adminUser.id,
+          },
+        })
+      )
+    );
+    console.log(`✅ Assigned ${debtPermissions.length} debt permissions to accountant role`);
+  }
+
+  if (salesStaffRole) {
+    await Promise.all(
+      debtPermissions.map((p) =>
+        prisma.rolePermission.upsert({
+          where: {
+            roleId_permissionId: {
+              roleId: salesStaffRole.id,
+              permissionId: p.id,
+            },
+          },
+          update: {},
+          create: {
+            roleId: salesStaffRole.id,
+            permissionId: p.id,
+            assignedBy: adminUser.id,
+          },
+        })
+      )
+    );
+    console.log(`✅ Assigned ${debtPermissions.length} debt permissions to sales_staff role`);
+  }
 
   // =====================================================
   // 7. SEED CATEGORIES
