@@ -46,7 +46,6 @@ class SmartDebtController {
         meta: (result as any).meta,
         timestamp: new Date().toISOString(),
       });
-      console.log('SmartDebtController.getAll executed with data:', (result as any).data);
     } catch (error) {
       next(error);
     }
@@ -75,8 +74,6 @@ class SmartDebtController {
         data: data,
         message: `Đã lấy danh sách in (${exportType}) cho năm ${targetYear}.`
       });
-
-      console.log(`SmartDebtController.exportList executed for year ${targetYear} and type ${exportType} with data:`, data);
     } catch (error) {
       next(error);
     }
@@ -174,7 +171,7 @@ class SmartDebtController {
         notes,
         assignedUserId: assignedUserId ? Number(assignedUserId) : undefined
       })
-        .then(() => console.log(`✅ [Background] SyncFull hoàn tất cho ${customerId ? 'C-' + customerId : 'S-' + supplierId}`))
+        .then(() => {})
         .catch((err) => console.error(`❌ [Background] Lỗi SyncFull:`, err));
 
       res.status(202).json({
@@ -201,7 +198,7 @@ class SmartDebtController {
 
       // 🚀 FIRE & FORGET
       debtService.syncSnapAll(Number(year))
-        .then((r) => console.log(`✅ [Batch Snap] Hoàn tất: ${r.success}/${r.totalChecked}`))
+        .then(() => {})
         .catch((e) => console.error(`❌ [Batch Snap] Lỗi:`, e));
 
       res.status(202).json({
@@ -224,7 +221,7 @@ class SmartDebtController {
 
       // 🚀 FIRE & FORGET
       debtService.syncFullAll(Number(year))
-        .then((r) => console.log(`✅ [Batch Full] Hoàn tất: ${r.success}/${r.totalChecked}`))
+        .then(() => {})
         .catch((e) => console.error(`❌ [Batch Full] Lỗi:`, e));
 
       res.status(202).json({
