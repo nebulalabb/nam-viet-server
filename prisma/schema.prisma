@@ -1605,6 +1605,19 @@ enum ContentType {
   video
 }
 
+enum NewsCommentStatus {
+  pending
+  approved
+  rejected
+}
+
+enum NewsSharePlatform {
+  facebook
+  copy_link
+  instagram
+  native
+}
+
 // News Category
 model NewsCategory {
   id           Int        @id @default(autoincrement())
@@ -1656,6 +1669,7 @@ model News {
   viewCount       Int         @default(0) @map("view_count")
   likeCount       Int         @default(0) @map("like_count")
   commentCount    Int         @default(0) @map("comment_count")
+  shareCount      Int         @default(0) @map("share_count")
   isFeatured      Boolean     @default(false) @map("is_featured")
   metaTitle       String?     @map("meta_title") @db.VarChar(255)
   metaDescription String?     @map("meta_description") @db.Text
@@ -1671,12 +1685,68 @@ model News {
   creator          User?             @relation("NewsCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   updater          User?             @relation("NewsUpdater", fields: [updatedBy], references: [id], onDelete: SetNull)
   newsTagRelations NewsTagRelation[]
+  newsLikes        NewsLike[]
+  newsComments     NewsComment[]
+  newsShares       NewsShare[]
 
   @@index([categoryId, status, publishedAt])
   @@index([authorId])
   @@index([isFeatured, status])
   @@index([contentType, status])
   @@map("news")
+}
+
+model NewsLike {
+  id        Int      @id @default(autoincrement())
+  newsId    Int      @map("news_id")
+  clientId  String   @map("client_id") @db.VarChar(120)
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, clientId])
+  @@index([newsId])
+  @@map("news_likes")
+}
+
+model NewsComment {
+  id          Int               @id @default(autoincrement())
+  newsId      Int               @map("news_id")
+  parentId    Int?              @map("parent_id")
+  authorName  String            @map("author_name") @db.VarChar(120)
+  authorEmail String?           @map("author_email") @db.VarChar(120)
+  content     String            @db.Text
+  status      NewsCommentStatus @default(pending)
+  ipAddress   String?           @map("ip_address") @db.VarChar(45)
+  userAgent   String?           @map("user_agent") @db.VarChar(255)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  deletedAt   DateTime?         @map("deleted_at")
+
+  news    News          @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  parent  NewsComment?  @relation("NewsCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies NewsComment[] @relation("NewsCommentReplies")
+
+  @@index([newsId, status, createdAt])
+  @@index([parentId])
+  @@map("news_comments")
+}
+
+model NewsShare {
+  id        Int               @id @default(autoincrement())
+  newsId    Int               @map("news_id")
+  platform  NewsSharePlatform
+  clientId  String?           @map("client_id") @db.VarChar(120)
+  ipAddress String?           @map("ip_address") @db.VarChar(45)
+  userAgent String?           @map("user_agent") @db.VarChar(255)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@index([newsId, platform, createdAt])
+  @@map("news_shares")
 }
 
 // News Tag Relation (Many-to-Many)

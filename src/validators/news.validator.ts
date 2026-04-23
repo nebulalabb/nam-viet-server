@@ -36,6 +36,34 @@ export const newsQuerySchema = z.object({
     sortOrder: z.enum(['asc', 'desc']).optional(),
 });
 
+export const newsLikeSchema = z.object({
+    clientId: z.string().min(8).max(120),
+});
+
+export const createNewsCommentSchema = z.object({
+    authorName: z.string().min(2, 'Tên là bắt buộc').max(120),
+    authorEmail: z.string().email('Email không hợp lệ').max(120).optional().or(z.literal('')),
+    content: z.string().min(2, 'Nội dung bình luận là bắt buộc').max(2000),
+    parentId: z.number().int().positive().optional(),
+});
+
+export const newsCommentQuerySchema = z.object({
+    page: z.string().optional(),
+    limit: z.string().optional(),
+    newsId: z.string().optional(),
+    status: z.enum(['pending', 'approved', 'rejected']).optional(),
+    search: z.string().optional(),
+});
+
+export const updateNewsCommentStatusSchema = z.object({
+    status: z.enum(['pending', 'approved', 'rejected']),
+});
+
+export const trackNewsShareSchema = z.object({
+    platform: z.enum(['facebook', 'copy_link', 'instagram', 'native']),
+    clientId: z.string().min(8).max(120).optional(),
+});
+
 // Category Schema
 export const createCategorySchema = z.object({
     categoryKey: z.string().min(2).max(50).optional(),
@@ -56,6 +84,11 @@ export const createTagSchema = z.object({
 export type CreateNewsInput = z.infer<typeof createNewsSchema>;
 export type UpdateNewsInput = z.infer<typeof updateNewsSchema>;
 export type NewsQueryInput = z.infer<typeof newsQuerySchema>;
+export type NewsLikeInput = z.infer<typeof newsLikeSchema>;
+export type CreateNewsCommentInput = z.infer<typeof createNewsCommentSchema>;
+export type NewsCommentQueryInput = z.infer<typeof newsCommentQuerySchema>;
+export type UpdateNewsCommentStatusInput = z.infer<typeof updateNewsCommentStatusSchema>;
+export type TrackNewsShareInput = z.infer<typeof trackNewsShareSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;

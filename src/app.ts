@@ -247,8 +247,6 @@ app.use('/api/warranty', warrantyRoutes);
 
 // News routes
 app.use('/api/news', newsRoutes);
-// News routes
-app.use('/api/news', newsRoutes);
 app.use('/api/news-categories', newsCategoryRoutes);
 
 
