@@ -275,20 +275,27 @@ export class NewsService {
     }
 
     static async createComment(newsId: number, data: CreateNewsCommentInput, meta: { ipAddress?: string; userAgent?: string }) {
-        const comment = await prisma.newsComment.create({
-            data: {
-                newsId,
-                parentId: data.parentId,
-                authorName: data.authorName.trim(),
-                authorEmail: data.authorEmail?.trim() || null,
-                content: data.content.trim(),
-                status: 'pending',
-                ipAddress: meta.ipAddress,
-                userAgent: meta.userAgent?.slice(0, 255),
-            },
-        });
+        return prisma.$transaction(async (tx) => {
+            const comment = await tx.newsComment.create({
+                data: {
+                    newsId,
+                    parentId: data.parentId,
+                    authorName: data.authorName.trim(),
+                    authorEmail: data.authorEmail?.trim() || null,
+                    content: data.content.trim(),
+                    status: 'approved',
+                    ipAddress: meta.ipAddress,
+                    userAgent: meta.userAgent?.slice(0, 255),
+                },
+            });
 
-        return comment;
+            await tx.news.update({
+                where: { id: newsId },
+                data: { commentCount: { increment: 1 } },
+            });
+
+            return comment;
+        });
     }
 
     static async getCommentsAdmin(query: NewsCommentQueryInput) {
