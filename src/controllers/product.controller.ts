@@ -16,6 +16,7 @@ class ProductController {
       supplierId,
       status,
       type,
+      productType,
       sortBy,
       sortOrder,
     } = req.query as any;
@@ -29,9 +30,10 @@ class ProductController {
       warehouseId: warehouseId ? parseInt(warehouseId) : undefined,
       status,
       type,
+      productType,
       sortBy,
       sortOrder,
-    });
+    } as any);
 
     const response: ApiResponse = {
       success: true,
