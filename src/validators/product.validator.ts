@@ -21,6 +21,9 @@ export const createProductSchema = z.object({
   hasExpiry: z.boolean().optional().default(false),
   manageSerial: z.boolean().optional().default(false),
   type: z.enum(['PRODUCT', 'MATERIAL']).optional().default('PRODUCT'),
+  productType: z.string().optional(),
+  sellingPriceRetail: z.union([z.number(), z.string().transform(Number)]).optional().nullable(),
+  sellingPriceWholesale: z.union([z.number(), z.string().transform(Number)]).optional().nullable(),
   // New fields added
   taxIds: z.array(z.number()).optional(),
   materialIds: z.array(z.number()).optional(),
@@ -53,6 +56,9 @@ export const updateProductSchema = z.object({
   hasExpiry: z.boolean().optional(),
   manageSerial: z.boolean().optional(),
   type: z.enum(['PRODUCT', 'MATERIAL']).optional(),
+  productType: z.string().optional(),
+  sellingPriceRetail: z.union([z.number(), z.string().transform(Number)]).nullable().optional(),
+  sellingPriceWholesale: z.union([z.number(), z.string().transform(Number)]).nullable().optional(),
   // New fields added
   taxIds: z.array(z.number()).optional(),
   materialIds: z.array(z.number()).optional(),
@@ -107,6 +113,7 @@ export const productQuerySchema = z.object({
     .refine((val: any) => !!val, { message: 'Trạng thái không hợp lệ!' })
     .optional(),
   type: z.enum(['PRODUCT', 'MATERIAL']).optional(),
+  productType: z.string().optional(),
   sortBy: z.string().optional().default('createdAt'),
   sortOrder: z
     .enum(['asc', 'desc'])

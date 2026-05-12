@@ -26,9 +26,10 @@ class ProductService {
       warehouseId,
       status,
       type,
+      productType,
       sortBy = 'createdAt',
       sortOrder = 'desc',
-    } = params;
+    } = params as any;
 
 
     const offset = (page - 1) * limit;
@@ -52,6 +53,15 @@ class ProductService {
       }),
       ...(status && { status: status as any }),
       ...(type && { type: type as any }),
+      ...(productType === 'Sầu Riêng' && { productName: { contains: 'Sầu Riêng' } }),
+      ...(productType === 'Lúa' && { productName: { contains: 'Lúa' } }),
+      ...(productType === 'Hàng hóa' && { productType: 'goods' }),
+      ...(productType === 'Khác' && { 
+        AND: [
+          { productName: { not: { contains: 'Sầu Riêng' } } },
+          { productName: { not: { contains: 'Lúa' } } }
+        ]
+      }),
     };
 
     const total = await prisma.product.count({ where });
@@ -292,6 +302,9 @@ class ProductService {
         manageSerial: data.manageSerial ?? false,
         status: (data.status as any) || 'active',
         type: (data.type as any) || 'PRODUCT',
+        ...({ productType: (data as any).productType || 'goods' } as any),
+        ...({ sellingPriceRetail: (data as any).sellingPriceRetail ?? null } as any),
+        ...({ sellingPriceWholesale: (data as any).sellingPriceWholesale ?? null } as any),
         createdBy: userId,
         ...(data.attributeIdsWithValue && {
           productHasAttributes: {
