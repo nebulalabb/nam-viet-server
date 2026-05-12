@@ -67,4 +67,6 @@ prisma/seeds/
 src/prisma/seeds/
 src/generated/prisma
 
-*.md
+*.md.env.production
+
+.env.production
