@@ -10,6 +10,41 @@ import {
 const prisma = new PrismaClient();
 
 class ProductService {
+  private resolveLegacyProductTypeFilter(productType?: string): Prisma.ProductWhereInput {
+    if (!productType) return {};
+
+    const normalized = productType.trim().toLowerCase();
+
+    // Legacy public filters from frontend
+    if (normalized === 'sầu riêng' || normalized === 'sau rieng') {
+      return { productName: { contains: 'Sầu Riêng' } };
+    }
+
+    if (normalized === 'lúa' || normalized === 'lua') {
+      return { productName: { contains: 'Lúa' } };
+    }
+
+    if (normalized === 'khác' || normalized === 'khac') {
+      return {
+        AND: [
+          { productName: { not: { contains: 'Sầu Riêng' } } },
+          { productName: { not: { contains: 'Lúa' } } },
+        ],
+      };
+    }
+
+    // Backward-compatible mapping from old productType semantics to current Product.type enum
+    if (['hàng hóa', 'hang hoa', 'goods', 'finished_product', 'product'].includes(normalized)) {
+      return { type: 'PRODUCT' };
+    }
+
+    if (['raw_material', 'packaging', 'material', 'nguyên liệu', 'nguyen lieu', 'bao bì', 'bao bi'].includes(normalized)) {
+      return { type: 'MATERIAL' };
+    }
+
+    return {};
+  }
+
   private async generateCode(): Promise<string> {
     const count = await prisma.product.count();
     const number = (count + 1).toString().padStart(4, '0');
@@ -53,15 +88,7 @@ class ProductService {
       }),
       ...(status && { status: status as any }),
       ...(type && { type: type as any }),
-      ...(productType === 'Sầu Riêng' && { productName: { contains: 'Sầu Riêng' } }),
-      ...(productType === 'Lúa' && { productName: { contains: 'Lúa' } }),
-      ...(productType === 'Hàng hóa' && { productType: 'goods' }),
-      ...(productType === 'Khác' && { 
-        AND: [
-          { productName: { not: { contains: 'Sầu Riêng' } } },
-          { productName: { not: { contains: 'Lúa' } } }
-        ]
-      }),
+      ...this.resolveLegacyProductTypeFilter(productType),
     };
 
     const total = await prisma.product.count({ where });
@@ -302,7 +329,6 @@ class ProductService {
         manageSerial: data.manageSerial ?? false,
         status: (data.status as any) || 'active',
         type: (data.type as any) || 'PRODUCT',
-        ...({ productType: (data as any).productType || 'goods' } as any),
         ...({ sellingPriceRetail: (data as any).sellingPriceRetail ?? null } as any),
         ...({ sellingPriceWholesale: (data as any).sellingPriceWholesale ?? null } as any),
         createdBy: userId,
