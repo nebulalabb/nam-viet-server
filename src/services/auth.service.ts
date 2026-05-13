@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword } from '@utils/password';
-import { generateAccessToken } from '@utils/jwt';
+import { generateAccessToken, verifyAccessToken } from '@utils/jwt';
 import { AuthenticationError, NotFoundError, ValidationError } from '@utils/errors';
 import { JwtPayload } from '@custom-types/common.type';
 import { logActivity } from '@utils/logger';
@@ -108,6 +108,25 @@ class AuthService {
   async logout(userId: number, accessToken: string) {
     if (accessToken) {
       tokenBlacklist.add(accessToken);
+
+      // Persist session logout so revoked devices are kicked out across instances/restarts.
+      try {
+        const decoded = verifyAccessToken(accessToken);
+        if (decoded.loginHistoryId) {
+          await prisma.loginHistory.updateMany({
+            where: {
+              id: decoded.loginHistoryId,
+              userId,
+              logoutAt: null,
+            },
+            data: {
+              logoutAt: new Date(),
+            },
+          });
+        }
+      } catch {
+        // Ignore token decode errors here; blacklist handling is still applied.
+      }
     }
     // Auto cleanup logic could be added here, but for simplicity we rely on JWT maxAge
 
@@ -515,6 +534,12 @@ class AuthService {
       },
     });
 
+    // Create LoginHistory entry first so token is bound to this specific session/device
+    const loginHistory = await loginHistoryService.createLoginHistory(user.id, {
+      userAgent: userAgent || 'unknown',
+      ipAddress: ipAddress || 'unknown',
+    });
+
     // Generate tokens
     const payload: JwtPayload = {
       id: user.id,
@@ -522,6 +547,7 @@ class AuthService {
       roleId: user.roleId,
       warehouseId: user.warehouseId || undefined,
       employeeCode: user.employeeCode,
+      loginHistoryId: loginHistory.id,
     };
 
     const accessToken = generateAccessToken(payload, '7d'); // Changed to 7d to match crm-template
@@ -532,12 +558,6 @@ class AuthService {
       ipAddress,
       userAgent: userAgent || 'unknown',
       method: '2FA_OTP',
-    });
-
-    // Create LoginHistory entry
-    await loginHistoryService.createLoginHistory(user.id, {
-      userAgent: userAgent || 'unknown',
-      ipAddress: ipAddress || 'unknown',
     });
 
     // Create ActivityLog entry for system log
