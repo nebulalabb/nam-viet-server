@@ -751,7 +751,7 @@ class WarehouseService {
           data: {
             warehouseCode: item.warehouseCode,
             warehouseName: item.warehouseName,
-            warehouseType: item.warehouseType || 'goods',
+            warehouseType: item.warehouseType || 'product',
             city: item.city || null,
             region: item.region || null,
             address: item.address || null,

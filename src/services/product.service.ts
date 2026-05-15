@@ -313,9 +313,6 @@ class ProductService {
       data: {
         code,
         productName: data.productName,
-        categoryId: data.categoryId,
-        supplierId: data.supplierId,
-        unitId: data.unitId,
         description: data.description,
         note: data.note,
         basePrice: data.basePrice,
@@ -329,9 +326,16 @@ class ProductService {
         manageSerial: data.manageSerial ?? false,
         status: (data.status as any) || 'active',
         type: (data.type as any) || 'PRODUCT',
-        ...({ sellingPriceRetail: (data as any).sellingPriceRetail ?? null } as any),
-        ...({ sellingPriceWholesale: (data as any).sellingPriceWholesale ?? null } as any),
-        createdBy: userId,
+        ...(data.categoryId !== undefined && data.categoryId !== null && {
+          category: { connect: { id: Number(data.categoryId) } },
+        }),
+        ...(data.supplierId !== undefined && data.supplierId !== null && {
+          supplier: { connect: { id: Number(data.supplierId) } },
+        }),
+        ...(data.unitId !== undefined && data.unitId !== null && {
+          unit: { connect: { id: Number(data.unitId) } },
+        }),
+        creator: { connect: { id: userId } },
         ...(data.attributeIdsWithValue && {
           productHasAttributes: {
             create: data.attributeIdsWithValue.map((attr) => ({
@@ -417,6 +421,9 @@ class ProductService {
       taxIds,
       warrantyPolicy,
       materialIds,
+      categoryId,
+      supplierId,
+      unitId,
       ...restData
     } = data;
 
@@ -424,9 +431,27 @@ class ProductService {
       where: { id },
       data: {
         ...restData,
+        ...(categoryId !== undefined && {
+          category:
+            categoryId === null
+              ? { disconnect: true }
+              : { connect: { id: Number(categoryId) } },
+        }),
+        ...(supplierId !== undefined && {
+          supplier:
+            supplierId === null
+              ? { disconnect: true }
+              : { connect: { id: Number(supplierId) } },
+        }),
+        ...(unitId !== undefined && {
+          unit:
+            unitId === null
+              ? { disconnect: true }
+              : { connect: { id: Number(unitId) } },
+        }),
         taxIds: taxIds !== undefined ? taxIds ? JSON.parse(JSON.stringify(taxIds)) : null : undefined,
         warrantyPolicy: warrantyPolicy !== undefined ? warrantyPolicy ? JSON.parse(JSON.stringify(warrantyPolicy)) : null : undefined,
-        updatedBy: userId,
+        updater: { connect: { id: userId } },
         ...(attributeIdsWithValue && {
           productHasAttributes: {
             deleteMany: {},
